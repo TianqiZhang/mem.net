@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    name: Build and Spec Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore MemNet.sln --configfile NuGet.Config
+
+      - name: Build
+        run: dotnet build MemNet.sln -c Debug --no-restore
+
+      - name: Run spec tests
+        run: dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
+
+  azure-build:
+    name: Azure SDK Compile Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore (Azure SDK enabled)
+        run: dotnet restore src/MemNet.MemoryService/MemNet.MemoryService.csproj -p:MemNetEnableAzureSdk=true --configfile NuGet.Config
+
+      - name: Build (Azure SDK enabled)
+        run: dotnet build src/MemNet.MemoryService/MemNet.MemoryService.csproj -c Debug -p:MemNetEnableAzureSdk=true --no-restore
