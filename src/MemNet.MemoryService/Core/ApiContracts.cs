@@ -23,17 +23,12 @@ public sealed record EvidenceRef(
 
 public sealed record AssembleContextRequest(
     string PolicyId,
-    ConversationHint? ConversationHint,
     int? MaxDocs,
     int? MaxCharsTotal);
 
-public sealed record ConversationHint(string? Text, string? ProjectId);
-
 public sealed record AssembleContextResponse(
-    string? SelectedProjectId,
     IReadOnlyList<AssembledDocument> Documents,
-    IReadOnlyList<string> DroppedBindings,
-    RoutingDebug RoutingDebug);
+    IReadOnlyList<string> DroppedBindings);
 
 public sealed record AssembledDocument(
     string BindingId,
@@ -41,11 +36,6 @@ public sealed record AssembledDocument(
     string Path,
     string ETag,
     DocumentEnvelope Document);
-
-public sealed record RoutingDebug(
-    double DeterministicScore,
-    double SemanticScore,
-    string Reason);
 
 public sealed record SearchEventsRequest(
     string? Query,

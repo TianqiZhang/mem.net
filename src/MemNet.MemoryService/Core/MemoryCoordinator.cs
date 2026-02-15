@@ -148,22 +148,6 @@ public sealed class MemoryCoordinator(
         var policyDefinition = policy.GetPolicy(request.PolicyId);
         var sortedBindings = policyDefinition.DocumentBindings.OrderBy(x => x.ReadPriority).ToList();
 
-        var selectedProjectId = request.ConversationHint?.ProjectId;
-        var deterministicScore = 0d;
-        var reason = "no_match";
-        if (string.IsNullOrWhiteSpace(selectedProjectId))
-        {
-            var routed = await TryRouteProjectAsync(tenantId, userId, policyDefinition, request.ConversationHint?.Text, cancellationToken);
-            selectedProjectId = routed.ProjectId;
-            deterministicScore = routed.Score;
-            reason = routed.Reason;
-        }
-        else
-        {
-            deterministicScore = 1.0;
-            reason = "explicit_project_id";
-        }
-
         var maxDocs = request.MaxDocs.GetValueOrDefault(4);
         var maxCharsTotal = request.MaxCharsTotal.GetValueOrDefault(30000);
 
@@ -179,7 +163,7 @@ public sealed class MemoryCoordinator(
                 continue;
             }
 
-            var resolvedPath = ResolveBindingPath(binding, selectedProjectId);
+            var resolvedPath = ResolveBindingPath(binding);
             if (resolvedPath is null)
             {
                 continue;
@@ -204,10 +188,8 @@ public sealed class MemoryCoordinator(
         }
 
         return new AssembleContextResponse(
-            SelectedProjectId: selectedProjectId,
             Documents: result,
-            DroppedBindings: dropped,
-            RoutingDebug: new RoutingDebug(deterministicScore, 0, reason));
+            DroppedBindings: dropped);
     }
 
     public Task WriteEventAsync(EventDigest digest, CancellationToken cancellationToken = default)
@@ -397,24 +379,14 @@ public sealed class MemoryCoordinator(
         return resolvedBinding;
     }
 
-    private static string? ResolveBindingPath(DocumentBinding binding, string? projectId)
+    private static string? ResolveBindingPath(DocumentBinding binding)
     {
         if (!string.IsNullOrWhiteSpace(binding.Path))
         {
             return binding.Path;
         }
 
-        if (string.IsNullOrWhiteSpace(binding.PathTemplate))
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(projectId))
-        {
-            return null;
-        }
-
-        return binding.PathTemplate.Replace("{project_id}", projectId, StringComparison.Ordinal);
+        return null;
     }
 
     private static void ValidateWritablePaths(DocumentBinding binding, IReadOnlyList<PatchOperation> ops)
@@ -439,75 +411,6 @@ public sealed class MemoryCoordinator(
                 throw new ApiException(StatusCodes.Status422UnprocessableEntity, "PATH_NOT_WRITABLE", $"Patch path '{op.Path}' is not writable for binding '{binding.BindingId}'.");
             }
         }
-    }
-
-    private async Task<(string? ProjectId, double Score, string Reason)> TryRouteProjectAsync(
-        string tenantId,
-        string userId,
-        PolicyDefinition policyDefinition,
-        string? hintText,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(hintText))
-        {
-            return (null, 0, "no_hint");
-        }
-
-        var tokens = hintText
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => x.ToLowerInvariant())
-            .ToHashSet(StringComparer.Ordinal);
-
-        var topProjectId = default(string);
-        var topScore = 0.0;
-
-        foreach (var binding in policyDefinition.DocumentBindings.Where(x => !string.IsNullOrWhiteSpace(x.Path)))
-        {
-            var key = new DocumentKey(tenantId, userId, binding.Namespace, binding.Path!);
-            var doc = await documentStore.GetAsync(key, cancellationToken);
-            if (doc?.Envelope.Content["projects_index"] is not JsonArray projectsIndex)
-            {
-                continue;
-            }
-
-            foreach (var node in projectsIndex)
-            {
-                if (node is not JsonObject item)
-                {
-                    continue;
-                }
-
-                var projectId = item["project_id"]?.GetValue<string>();
-                if (string.IsNullOrWhiteSpace(projectId))
-                {
-                    continue;
-                }
-
-                var aliases = item["aliases"] is JsonArray aliasArray
-                    ? aliasArray.Where(x => x is not null).Select(x => x!.GetValue<string>().ToLowerInvariant()).ToArray()
-                    : Array.Empty<string>();
-
-                var keywords = item["keywords"] is JsonArray keywordArray
-                    ? keywordArray.Where(x => x is not null).Select(x => x!.GetValue<string>().ToLowerInvariant()).ToArray()
-                    : Array.Empty<string>();
-
-                var score = aliases.Count(alias => tokens.Contains(alias));
-                score += keywords.Count(keyword => tokens.Contains(keyword));
-
-                if (score > topScore)
-                {
-                    topScore = score;
-                    topProjectId = projectId;
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(topProjectId))
-        {
-            return (null, 0, "no_match");
-        }
-
-        return (topProjectId, Math.Min(1, topScore / 3.0), "alias_or_keyword_match");
     }
 
 }

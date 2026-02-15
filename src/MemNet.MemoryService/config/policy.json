@@ -4,28 +4,32 @@
       "policy_id": "project-copilot-v1",
       "document_bindings": [
         {
-          "binding_id": "user_static",
+          "binding_id": "user_profile",
           "namespace": "user",
-          "path": "user_static.json",
+          "path": "profile.json",
           "path_template": null,
-          "schema_id": "memory.user.static",
+          "schema_id": "memory.user.profile",
           "schema_version": "1.0.0",
           "max_chars": 12000,
           "read_priority": 10,
           "write_mode": "restricted_patch",
-          "allowed_paths": [],
-          "required_content_paths": [
-            "/profile"
+          "allowed_paths": [
+            "/profile",
+            "/projects_index"
           ],
-          "max_content_chars": 8000,
+          "required_content_paths": [
+            "/profile",
+            "/projects_index"
+          ],
+          "max_content_chars": 9000,
           "max_array_items": 200
         },
         {
-          "binding_id": "user_dynamic",
+          "binding_id": "long_term_memory",
           "namespace": "user",
-          "path": "user_dynamic.json",
+          "path": "long_term_memory.json",
           "path_template": null,
-          "schema_id": "memory.user.dynamic",
+          "schema_id": "memory.user.long_term_memory",
           "schema_version": "1.0.0",
           "max_chars": 18000,
           "read_priority": 20,
@@ -33,8 +37,7 @@
           "allowed_paths": [
             "/preferences",
             "/durable_facts",
-            "/pending_confirmations",
-            "/projects_index"
+            "/pending_confirmations"
           ],
           "required_content_paths": [
             "/preferences"
@@ -43,7 +46,7 @@
           "max_array_items": 300
         },
         {
-          "binding_id": "project_doc",
+          "binding_id": "project_memory",
           "namespace": "projects",
           "path": null,
           "path_template": "{project_id}.json",

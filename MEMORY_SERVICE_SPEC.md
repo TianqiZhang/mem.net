@@ -188,20 +188,14 @@ Request body:
 ```json
 {
   "policy_id": "project-copilot-v1",
-  "conversation_hint": {
-    "text": "Need help with project alpha",
-    "project_id": null
-  },
   "max_docs": 4,
   "max_chars_total": 30000
 }
 ```
 
 Response includes:
-- `selected_project_id`
 - `documents[]`
 - `dropped_bindings[]`
-- `routing_debug`
 
 ### 8.5 Write Event Digest
 `POST /v1/tenants/{tenantId}/users/{userId}/events`
@@ -247,10 +241,10 @@ Service does not perform multi-document transactions.
 
 ## 11. Context Assembly Behavior
 - Bindings are read by ascending `read_priority`.
-- Project routing precedence:
-1. explicit `conversation_hint.project_id`
-2. deterministic alias/keyword match from `projects_index`
-3. fallback to no project selection
+- Only fixed-path bindings are assembled by default.
+- Templated bindings (for example `path_template`) are not auto-expanded in `context:assemble`.
+- Caller loads templated documents on demand via direct document APIs.
+- Event digests are retrieved via `events:search` as a separate API call.
 - `max_docs` and `max_chars_total` budgets are enforced.
 - Dropped bindings are surfaced in response metadata.
 
@@ -332,4 +326,3 @@ The following are intentionally deferred from v1 runtime core:
 
 ## 19. Implementation Status
 Current implementation satisfies v1 acceptance criteria and passes spec tests in `tests/MemNet.MemoryService.SpecTests`.
-

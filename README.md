@@ -25,6 +25,25 @@ Policy-driven memory service for multi-agent systems.
   - `filesystem` (default local mode)
   - `azure` (Blob + optional AI Search, build-flag gated)
 
+## Default Starter Policy
+
+The default `policy.json` models a practical learn-companion memory shape:
+
+- `user/profile.json`
+  - key user info
+  - optional `projects_index` for caller-side routing
+- `user/long_term_memory.json`
+  - preferences and durable user facts
+- `projects/{project_id}.json`
+  - project-specific memory
+- event digests
+  - write + search across conversations and related services
+
+Context assembly default behavior:
+- includes `profile.json` and `long_term_memory.json`
+- excludes templated project docs (load them on demand via document APIs)
+- event digests are retrieved via `POST /events:search` by the caller
+
 ## Architecture
 
 ```mermaid

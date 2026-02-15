@@ -90,6 +90,7 @@
 - [x] Remove request-time confidence gates from core mutation path
 - [x] Defer compaction from runtime core to future background work
 - [x] Rename API request selector fields from `profile_id` to `policy_id`
+- [x] Remove project-specific routing semantics from `context:assemble`; keep assembly generic and fixed-path only
 - [x] Update spec tests to match simplified policy behavior
 
 ## Residual Gaps (Post-Review)

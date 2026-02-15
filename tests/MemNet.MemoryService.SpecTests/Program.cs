@@ -21,7 +21,7 @@ internal sealed class SpecRunner
             PatchDocumentHappyPathAsync,
             PatchDocumentReturns412OnEtagMismatchAsync,
             PatchDocumentReturns422OnPathPolicyViolationAsync,
-            AssembleContextRoutesProjectAndRespectsBudgetsAsync,
+            AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync,
             EventSearchReturnsRelevantResultsAsync,
             HttpEndpointsWorkEndToEndAsync,
             AzureProviderDisabledReturns501Async,
@@ -59,14 +59,14 @@ internal sealed class SpecRunner
     private static async Task PatchDocumentHappyPathAsync()
     {
         using var scope = TestScope.Create();
-        var key = scope.Keys.UserDynamic;
-        var seeded = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Seeded user_dynamic missing.");
+        var key = scope.Keys.LongTermMemory;
+        var seeded = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Seeded long_term_memory missing.");
 
         var result = await scope.Coordinator.PatchDocumentAsync(
             key,
             new PatchDocumentRequest(
                 PolicyId: "project-copilot-v1",
-                BindingId: "user_dynamic",
+                BindingId: "long_term_memory",
                 Ops:
                 [
                     new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Use concise answers with examples."))
@@ -84,7 +84,7 @@ internal sealed class SpecRunner
     private static async Task PatchDocumentReturns412OnEtagMismatchAsync()
     {
         using var scope = TestScope.Create();
-        var key = scope.Keys.UserDynamic;
+        var key = scope.Keys.LongTermMemory;
 
         await Assert.ThrowsAsync<ApiException>(
             async () =>
@@ -93,7 +93,7 @@ internal sealed class SpecRunner
                     key,
                     new PatchDocumentRequest(
                         PolicyId: "project-copilot-v1",
-                        BindingId: "user_dynamic",
+                        BindingId: "long_term_memory",
                         Ops:
                         [
                             new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Mismatch test"))
@@ -109,8 +109,8 @@ internal sealed class SpecRunner
     private static async Task PatchDocumentReturns422OnPathPolicyViolationAsync()
     {
         using var scope = TestScope.Create();
-        var key = scope.Keys.UserDynamic;
-        var seeded = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Seeded user_dynamic missing.");
+        var key = scope.Keys.LongTermMemory;
+        var seeded = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Seeded long_term_memory missing.");
 
         await Assert.ThrowsAsync<ApiException>(
             async () =>
@@ -119,7 +119,7 @@ internal sealed class SpecRunner
                     key,
                     new PatchDocumentRequest(
                         PolicyId: "project-copilot-v1",
-                        BindingId: "user_dynamic",
+                        BindingId: "long_term_memory",
                         Ops:
                         [
                             new PatchOperation("replace", "/content/profile/display_name", JsonValue.Create("Oops"))
@@ -132,7 +132,7 @@ internal sealed class SpecRunner
             ex => ex.StatusCode == 422 && ex.Code == "PATH_NOT_WRITABLE");
     }
 
-    private static async Task AssembleContextRoutesProjectAndRespectsBudgetsAsync()
+    private static async Task AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync()
     {
         using var scope = TestScope.Create();
 
@@ -141,19 +141,17 @@ internal sealed class SpecRunner
             userId: scope.Keys.User,
             request: new AssembleContextRequest(
                 PolicyId: "project-copilot-v1",
-                ConversationHint: new ConversationHint("Need help with alpha retrieval", null),
                 MaxDocs: 5,
                 MaxCharsTotal: 30000));
 
-        Assert.Equal("project-alpha", full.SelectedProjectId);
-        Assert.True(full.Documents.Count >= 3, "Expected assembled context to include user_static, user_dynamic, and project doc.");
+        Assert.Equal(2, full.Documents.Count);
+        Assert.True(!full.Documents.Any(x => x.BindingId == "project_memory"), "Project document should not be included by default.");
 
         var tinyBudget = await scope.Coordinator.AssembleContextAsync(
             tenantId: scope.Keys.Tenant,
             userId: scope.Keys.User,
             request: new AssembleContextRequest(
                 PolicyId: "project-copilot-v1",
-                ConversationHint: new ConversationHint("Need help with alpha retrieval", null),
                 MaxDocs: 5,
                 MaxCharsTotal: 300));
 
@@ -210,7 +208,7 @@ internal sealed class SpecRunner
             Timeout = TimeSpan.FromSeconds(10)
         };
 
-        var getResponse = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        var getResponse = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         var getPayload = JsonNode.Parse(await getResponse.Content.ReadAsStringAsync())?.AsObject()
             ?? throw new Exception("Expected document payload.");
@@ -220,7 +218,7 @@ internal sealed class SpecRunner
         var patchPayload = new
         {
             policy_id = "project-copilot-v1",
-            binding_id = "user_dynamic",
+            binding_id = "long_term_memory",
             ops = new[]
             {
                 new { op = "replace", path = "/content/preferences/0", value = "HTTP patch updated preference." }
@@ -229,7 +227,7 @@ internal sealed class SpecRunner
             evidence = new { conversation_id = "c-http", message_ids = new[] { "m1" }, snapshot_uri = (string?)null }
         };
 
-        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
+        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json")
         {
             Content = JsonContent.Create(patchPayload)
         };
@@ -244,12 +242,12 @@ internal sealed class SpecRunner
         Assert.True(!string.IsNullOrWhiteSpace(newEtag), "Expected updated ETag from patch.");
         Assert.True(!string.Equals(etag, newEtag, StringComparison.Ordinal), "Expected ETag to change after patch.");
 
-        var stalePatchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
+        var stalePatchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json")
         {
             Content = JsonContent.Create(new
             {
                 policy_id = "project-copilot-v1",
-                binding_id = "user_dynamic",
+                binding_id = "long_term_memory",
                 ops = new[]
                 {
                     new { op = "replace", path = "/content/preferences/0", value = "stale write" }
@@ -268,14 +266,14 @@ internal sealed class SpecRunner
             new
             {
                 policy_id = "project-copilot-v1",
-                conversation_hint = new { text = "Need alpha retrieval support", project_id = (string?)null },
                 max_docs = 4,
                 max_chars_total = 30000
             });
         Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
         var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
             ?? throw new Exception("Expected context response.");
-        Assert.Equal("project-alpha", contextBody["selected_project_id"]?.GetValue<string>());
+        var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
+        Assert.Equal(2, contextDocs.Count);
 
         var now = DateTimeOffset.UtcNow;
         var writeEventResponse = await client.PostAsJsonAsync(
@@ -336,7 +334,7 @@ internal sealed class SpecRunner
             Timeout = TimeSpan.FromSeconds(10)
         };
 
-        var response = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        var response = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json");
         Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
 
         var payload = JsonNode.Parse(await response.Content.ReadAsStringAsync())?.AsObject()
@@ -436,18 +434,18 @@ internal sealed class SpecRunner
             Timeout = TimeSpan.FromSeconds(10)
         };
 
-        var getResponse = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        var getResponse = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         var getPayload = JsonNode.Parse(await getResponse.Content.ReadAsStringAsync())?.AsObject()
             ?? throw new Exception("Expected seeded document.");
         var etag = getPayload["etag"]?.GetValue<string>() ?? throw new Exception("Expected seeded ETag.");
 
-        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
+        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json")
         {
             Content = JsonContent.Create(new
             {
                 policy_id = "project-copilot-v1",
-                binding_id = "user_dynamic",
+                binding_id = "long_term_memory",
                 ops = new[] { new { op = "replace", path = "/content/preferences/0", value = "forget flow test" } },
                 reason = "live_update"
             })
@@ -487,7 +485,7 @@ internal sealed class SpecRunner
         Assert.True((forgetBody["events_deleted"]?.GetValue<int>() ?? 0) >= 1, "Expected events to be deleted.");
         Assert.True((forgetBody["audit_deleted"]?.GetValue<int>() ?? 0) >= 1, "Expected audit records to be deleted.");
 
-        var getAfterForget = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        var getAfterForget = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json");
         Assert.Equal(HttpStatusCode.NotFound, getAfterForget.StatusCode);
 
         var searchAfterForget = await client.PostAsJsonAsync(
@@ -695,9 +693,9 @@ internal sealed class TestScope : IDisposable
     {
         var now = DateTimeOffset.UtcNow;
 
-        var userStatic = new DocumentEnvelope(
+        var userProfile = new DocumentEnvelope(
             DocId: Guid.NewGuid().ToString("N"),
-            SchemaId: "memory.user.static",
+            SchemaId: "memory.user.profile",
             SchemaVersion: "1.0.0",
             CreatedAt: now,
             UpdatedAt: now,
@@ -708,21 +706,7 @@ internal sealed class TestScope : IDisposable
                 {
                     ["display_name"] = "Test User",
                     ["locale"] = "en-US"
-                }
-            });
-
-        var userDynamic = new DocumentEnvelope(
-            DocId: Guid.NewGuid().ToString("N"),
-            SchemaId: "memory.user.dynamic",
-            SchemaVersion: "1.0.0",
-            CreatedAt: now,
-            UpdatedAt: now,
-            UpdatedBy: "seed",
-            Content: new JsonObject
-            {
-                ["preferences"] = new JsonArray("Keep responses concise."),
-                ["durable_facts"] = new JsonArray(),
-                ["pending_confirmations"] = new JsonArray(),
+                },
                 ["projects_index"] = new JsonArray
                 {
                     new JsonObject
@@ -732,6 +716,20 @@ internal sealed class TestScope : IDisposable
                         ["keywords"] = new JsonArray("retrieval", "latency")
                     }
                 }
+            });
+
+        var longTermMemory = new DocumentEnvelope(
+            DocId: Guid.NewGuid().ToString("N"),
+            SchemaId: "memory.user.long_term_memory",
+            SchemaVersion: "1.0.0",
+            CreatedAt: now,
+            UpdatedAt: now,
+            UpdatedBy: "seed",
+            Content: new JsonObject
+            {
+                ["preferences"] = new JsonArray("Keep responses concise."),
+                ["durable_facts"] = new JsonArray(),
+                ["pending_confirmations"] = new JsonArray()
             });
 
         var projectDoc = new DocumentEnvelope(
@@ -751,8 +749,8 @@ internal sealed class TestScope : IDisposable
                 ["recent_notes"] = new JsonArray("Tune topK for latency")
             });
 
-        await documentStore.UpsertAsync(keys.UserStatic, userStatic, "*", default);
-        await documentStore.UpsertAsync(keys.UserDynamic, userDynamic, "*", default);
+        await documentStore.UpsertAsync(keys.UserProfile, userProfile, "*", default);
+        await documentStore.UpsertAsync(keys.LongTermMemory, longTermMemory, "*", default);
         await documentStore.UpsertAsync(keys.ProjectAlpha, projectDoc, "*", default);
     }
 }
@@ -878,9 +876,9 @@ internal sealed class ServiceHost : IDisposable
 
 internal sealed record TestKeys(string Tenant, string User)
 {
-    public DocumentKey UserStatic => new(Tenant, User, "user", "user_static.json");
+    public DocumentKey UserProfile => new(Tenant, User, "user", "profile.json");
 
-    public DocumentKey UserDynamic => new(Tenant, User, "user", "user_dynamic.json");
+    public DocumentKey LongTermMemory => new(Tenant, User, "user", "long_term_memory.json");
 
     public DocumentKey ProjectAlpha => new(Tenant, User, "projects", "project-alpha.json");
 }
