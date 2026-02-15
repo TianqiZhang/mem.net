@@ -21,7 +21,6 @@ internal sealed class SpecRunner
             PatchDocumentHappyPathAsync,
             PatchDocumentReturns412OnEtagMismatchAsync,
             PatchDocumentReturns422OnPathPolicyViolationAsync,
-            PatchDocumentReturns422OnLowConfidenceDurableFactsAsync,
             AssembleContextRoutesProjectAndRespectsBudgetsAsync,
             EventSearchReturnsRelevantResultsAsync,
             HttpEndpointsWorkEndToEndAsync,
@@ -66,15 +65,14 @@ internal sealed class SpecRunner
         var result = await scope.Coordinator.PatchDocumentAsync(
             key,
             new PatchDocumentRequest(
-                ProfileId: "project-copilot-v1",
+                PolicyId: "project-copilot-v1",
                 BindingId: "user_dynamic",
                 Ops:
                 [
                     new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Use concise answers with examples."))
                 ],
                 Reason: "live_update",
-                Evidence: new EvidenceRef("conv1", ["m1"], null),
-                Confidence: 0.9),
+                Evidence: new EvidenceRef("conv1", ["m1"], null)),
             ifMatch: seeded.ETag,
             actor: "spec-tests");
 
@@ -94,15 +92,14 @@ internal sealed class SpecRunner
                 await scope.Coordinator.PatchDocumentAsync(
                     key,
                     new PatchDocumentRequest(
-                        ProfileId: "project-copilot-v1",
+                        PolicyId: "project-copilot-v1",
                         BindingId: "user_dynamic",
                         Ops:
                         [
                             new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Mismatch test"))
                         ],
                         Reason: "live_update",
-                        Evidence: null,
-                        Confidence: 0.9),
+                        Evidence: null),
                     ifMatch: "\"stale\"",
                     actor: "spec-tests");
             },
@@ -121,46 +118,18 @@ internal sealed class SpecRunner
                 await scope.Coordinator.PatchDocumentAsync(
                     key,
                     new PatchDocumentRequest(
-                        ProfileId: "project-copilot-v1",
+                        PolicyId: "project-copilot-v1",
                         BindingId: "user_dynamic",
                         Ops:
                         [
                             new PatchOperation("replace", "/content/profile/display_name", JsonValue.Create("Oops"))
                         ],
                         Reason: "live_update",
-                        Evidence: null,
-                        Confidence: 0.9),
+                        Evidence: null),
                     ifMatch: seeded.ETag,
                     actor: "spec-tests");
             },
             ex => ex.StatusCode == 422 && ex.Code == "PATH_NOT_WRITABLE");
-    }
-
-    private static async Task PatchDocumentReturns422OnLowConfidenceDurableFactsAsync()
-    {
-        using var scope = TestScope.Create();
-        var key = scope.Keys.UserDynamic;
-        var seeded = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Seeded user_dynamic missing.");
-
-        await Assert.ThrowsAsync<ApiException>(
-            async () =>
-            {
-                await scope.Coordinator.PatchDocumentAsync(
-                    key,
-                    new PatchDocumentRequest(
-                        ProfileId: "project-copilot-v1",
-                        BindingId: "user_dynamic",
-                        Ops:
-                        [
-                            new PatchOperation("add", "/content/durable_facts/-", JsonValue.Create("User prefers concise architecture docs."))
-                        ],
-                        Reason: "replay_update",
-                        Evidence: null,
-                        Confidence: 0.2),
-                    ifMatch: seeded.ETag,
-                    actor: "spec-tests");
-            },
-            ex => ex.StatusCode == 422 && ex.Code == "CONFIDENCE_TOO_LOW");
     }
 
     private static async Task AssembleContextRoutesProjectAndRespectsBudgetsAsync()
@@ -171,7 +140,7 @@ internal sealed class SpecRunner
             tenantId: scope.Keys.Tenant,
             userId: scope.Keys.User,
             request: new AssembleContextRequest(
-                ProfileId: "project-copilot-v1",
+                PolicyId: "project-copilot-v1",
                 ConversationHint: new ConversationHint("Need help with alpha retrieval", null),
                 MaxDocs: 5,
                 MaxCharsTotal: 30000));
@@ -183,7 +152,7 @@ internal sealed class SpecRunner
             tenantId: scope.Keys.Tenant,
             userId: scope.Keys.User,
             request: new AssembleContextRequest(
-                ProfileId: "project-copilot-v1",
+                PolicyId: "project-copilot-v1",
                 ConversationHint: new ConversationHint("Need help with alpha retrieval", null),
                 MaxDocs: 5,
                 MaxCharsTotal: 300));
@@ -250,15 +219,14 @@ internal sealed class SpecRunner
 
         var patchPayload = new
         {
-            profile_id = "project-copilot-v1",
+            policy_id = "project-copilot-v1",
             binding_id = "user_dynamic",
             ops = new[]
             {
                 new { op = "replace", path = "/content/preferences/0", value = "HTTP patch updated preference." }
             },
             reason = "live_update",
-            evidence = new { conversation_id = "c-http", message_ids = new[] { "m1" }, snapshot_uri = (string?)null },
-            confidence = 0.9
+            evidence = new { conversation_id = "c-http", message_ids = new[] { "m1" }, snapshot_uri = (string?)null }
         };
 
         var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
@@ -280,7 +248,7 @@ internal sealed class SpecRunner
         {
             Content = JsonContent.Create(new
             {
-                profile_id = "project-copilot-v1",
+                policy_id = "project-copilot-v1",
                 binding_id = "user_dynamic",
                 ops = new[]
                 {
@@ -299,7 +267,7 @@ internal sealed class SpecRunner
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
             new
             {
-                profile_id = "project-copilot-v1",
+                policy_id = "project-copilot-v1",
                 conversation_hint = new { text = "Need alpha retrieval support", project_id = (string?)null },
                 max_docs = 4,
                 max_chars_total = 30000
@@ -434,7 +402,7 @@ internal sealed class SpecRunner
 
         var retentionResponse = await client.PostAsJsonAsync(
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
-            new { profile_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
+            new { policy_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
         Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
 
         var retentionBody = JsonNode.Parse(await retentionResponse.Content.ReadAsStringAsync())?.AsObject()
@@ -478,11 +446,10 @@ internal sealed class SpecRunner
         {
             Content = JsonContent.Create(new
             {
-                profile_id = "project-copilot-v1",
+                policy_id = "project-copilot-v1",
                 binding_id = "user_dynamic",
                 ops = new[] { new { op = "replace", path = "/content/preferences/0", value = "forget flow test" } },
-                reason = "live_update",
-                confidence = 0.9
+                reason = "live_update"
             })
         };
         patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
@@ -596,7 +563,7 @@ internal sealed class SpecRunner
 
         var retentionResponse = await client.PostAsJsonAsync(
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
-            new { profile_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
+            new { policy_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
         Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
     }
 }
@@ -695,13 +662,12 @@ internal sealed class TestScope : IDisposable
         var documentStore = new FileDocumentStore(options);
         var eventStore = new FileEventStore(options);
         var auditStore = new FileAuditStore(options);
-        var registry = new FileRegistryProvider(options);
+        var policy = new PolicyRegistry(options);
         var coordinator = new MemoryCoordinator(
             documentStore,
             eventStore,
             auditStore,
-            registry,
-            registry,
+            policy,
             NullLogger<MemoryCoordinator>.Instance);
 
         var keys = new TestKeys("tenant-1", "user-1");

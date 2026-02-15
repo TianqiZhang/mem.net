@@ -446,42 +446,26 @@ public sealed class FileUserDataMaintenanceStore(StorageOptions options) : IUser
     }
 }
 
-public sealed class FileRegistryProvider : IProfileRegistryProvider, ISchemaRegistryProvider
+public sealed class PolicyRegistry
 {
-    private readonly Dictionary<string, ProfileConfig> _profiles;
-    private readonly Dictionary<(string SchemaId, string Version), SchemaConfig> _schemas;
+    private readonly Dictionary<string, PolicyDefinition> _policies;
 
-    public FileRegistryProvider(StorageOptions options)
+    public PolicyRegistry(StorageOptions options)
     {
-        var schemasPath = Path.Combine(options.ConfigRoot, "schemas.json");
-        var profilesPath = Path.Combine(options.ConfigRoot, "profiles.json");
+        var policyPath = Path.Combine(options.ConfigRoot, "policy.json");
+        var policy = JsonSerializer.Deserialize<PolicyConfig>(File.ReadAllText(policyPath), JsonDefaults.Options)
+            ?? throw new InvalidOperationException("Failed to load policy configuration.");
 
-        var schemaRegistry = JsonSerializer.Deserialize<SchemaRegistry>(File.ReadAllText(schemasPath), JsonDefaults.Options)
-            ?? throw new InvalidOperationException("Failed to load schema registry.");
-        var profileRegistry = JsonSerializer.Deserialize<ProfileRegistry>(File.ReadAllText(profilesPath), JsonDefaults.Options)
-            ?? throw new InvalidOperationException("Failed to load profile registry.");
-
-        _schemas = schemaRegistry.Schemas.ToDictionary(x => (x.SchemaId, x.Version), x => x);
-        _profiles = profileRegistry.Profiles.ToDictionary(x => x.ProfileId, x => x, StringComparer.Ordinal);
+        _policies = policy.Policies.ToDictionary(x => x.PolicyId, x => x, StringComparer.Ordinal);
     }
 
-    public ProfileConfig GetProfile(string profileId)
+    public PolicyDefinition GetPolicy(string policyId)
     {
-        if (_profiles.TryGetValue(profileId, out var profile))
+        if (_policies.TryGetValue(policyId, out var policy))
         {
-            return profile;
+            return policy;
         }
 
-        throw new ApiException(StatusCodes.Status404NotFound, "PROFILE_NOT_FOUND", $"Profile '{profileId}' was not found.");
-    }
-
-    public SchemaConfig GetSchema(string schemaId, string version)
-    {
-        if (_schemas.TryGetValue((schemaId, version), out var schema))
-        {
-            return schema;
-        }
-
-        throw new ApiException(StatusCodes.Status422UnprocessableEntity, "SCHEMA_NOT_FOUND", $"Schema '{schemaId}:{version}' was not found.");
+        throw new ApiException(StatusCodes.Status404NotFound, "POLICY_NOT_FOUND", $"Policy '{policyId}' was not found.");
     }
 }

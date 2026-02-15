@@ -44,11 +44,9 @@ else
     throw new InvalidOperationException($"Unsupported provider '{provider}'.");
 }
 
-builder.Services.AddSingleton<IProfileRegistryProvider, FileRegistryProvider>();
-builder.Services.AddSingleton<ISchemaRegistryProvider, FileRegistryProvider>(sp => (FileRegistryProvider)sp.GetRequiredService<IProfileRegistryProvider>());
+builder.Services.AddSingleton<PolicyRegistry>();
 builder.Services.AddSingleton<MemoryCoordinator>();
 builder.Services.AddSingleton<ReplayService>();
-builder.Services.AddSingleton<CompactionService>();
 builder.Services.AddSingleton<DataLifecycleService>();
 
 builder.Services.ConfigureHttpJsonOptions(o =>
@@ -211,7 +209,7 @@ app.MapPost("/v1/tenants/{tenantId}/users/{userId}/retention:apply", async (
     DataLifecycleService lifecycleService,
     CancellationToken cancellationToken) =>
 {
-    var result = await lifecycleService.ApplyRetentionAsync(tenantId, userId, request.ProfileId, request.AsOfUtc, cancellationToken);
+    var result = await lifecycleService.ApplyRetentionAsync(tenantId, userId, request.PolicyId, request.AsOfUtc, cancellationToken);
     return Results.Ok(result);
 });
 

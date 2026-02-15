@@ -1,559 +1,335 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Draft for engineering review  
-Version: 1.0  
-Last Updated: February 14, 2026
+Status: Active v1 implementation  
+Version: 1.1  
+Last Updated: February 15, 2026
 
 ## 1. Purpose
-Build a shared, Azure-native memory service that multiple AI products can use for the same user identity. The service must keep memory durable, auditable, safe, and easy to evolve without hard-coding specific memory categories.
+`mem.net` is a shared memory service for multi-agent systems using a unified `(tenant_id, user_id)` identity.
 
-This specification defines the platform contract (storage, APIs, consistency, governance), plus a recommended starter memory profile for real agents.
+The service provides:
+- durable document storage with optimistic concurrency
+- policy-based write guardrails
+- deterministic context assembly
+- event digest write/search
+- lifecycle operations (retention and forget-user)
 
-## 2. Scope
-### In scope
-- Config-driven memory documents stored in Blob Storage.
-- Config-driven schema validation, writable path controls, and retention.
-- Conversation snapshots for replay extraction.
-- Searchable event digests in Azure AI Search.
-- Context assembly APIs for orchestrators.
-- Live writes (agent-time) and replay writes (post-conversation).
-- Multi-service support under unified `(tenant_id, user_id)`.
+## 2. First-Principles Scope (v1)
+Only four runtime capabilities are in scope:
+1. Resolve logical memory bindings to concrete files.
+2. Enforce safe writes (path allowlists + size/shape limits).
+3. Assemble context deterministically with bounded budgets.
+4. Apply lifecycle cleanup rules.
 
-### Out of scope (v1)
-- Temporal knowledge graph or ontology reasoning engine.
-- Fully autonomous LLM policy management.
-- End-user memory editing UI (can be added later).
-- Cross-tenant federation.
+If a new concept does not directly support one of these four capabilities, it is out of v1 runtime scope.
 
-## 3. Design Goals
-1. Keep memory practical: small number of durable artifacts, predictable operations.
-2. Keep service generic: no hard-coded memory types in core APIs.
-3. Keep correctness high: strong validation, evidence-linked writes, conflict safety.
-4. Keep operations simple: rebuildable indexes, clear retention/deletion, auditable changes.
-5. Keep costs controlled: bounded document sizes and compaction.
+## 3. Out of Scope (v1)
+- Runtime confidence gates.
+- Runtime compaction jobs.
+- Separate runtime schema registry.
+- End-user editing UI.
+- Autonomous policy generation by LLMs.
 
-## 4. Core Principles
-1. Artifact-first: Blob documents are source of truth.
-2. Config over convention: memory categories are profile-defined.
-3. Progressive disclosure: inject only relevant memory at runtime.
-4. Replay-first extraction: prefer snapshot replay for durable updates.
-5. Least privilege writes: per-profile writable path allowlists.
-6. Rebuildable search: indexes are derived, never authoritative.
+These may be added later as optional modules.
 
-## 5. Terminology
-- Document: versioned JSON artifact stored in Blob (for example `user_dynamic.json`).
-- Namespace: logical grouping of documents (for example `user`, `projects`, `crm`).
-- Schema: JSON Schema used to validate a document kind/version.
-- Profile: config bundle that maps an agent/product to allowed schemas, paths, and limits.
-- Snapshot: encrypted blob of full conversation context used for replay.
-- Event Digest: searchable summary record with pointers to evidence/snapshot.
-- Patch Operation: RFC 6902 JSON Patch operation applied with optimistic concurrency.
-
-## 6. Non-negotiable Boundary: System Policy vs User Memory
-System-wide safety/compliance policy is not stored in user memory and is not writable through memory APIs.  
-User-level guidance may be stored as memory, but it must be explicitly classified (for example `user_instructions`) and constrained by profile policy.
-
-## 7. High-Level Architecture
-### 7.1 Components
-- Memory API (App Service or Functions):
-  - document read/write/patch
+## 4. High-Level Architecture
+- API service (ASP.NET Core Minimal API)
+  - document read/patch/replace
   - context assembly
-  - schema/path/size validation
-  - ETag enforcement for optimistic concurrency
-- Blob Storage (source of truth):
-  - documents
-  - snapshots
-  - event records
-  - audit records
-- Azure AI Search (derived):
-  - event search index
-- Background workers (Functions + Queue/Service Bus):
-  - replay extraction
-  - compaction
-  - reindex jobs
-- Security dependencies:
-  - Entra ID, managed identity, Key Vault, private networking as required
+  - event write/search
+  - retention/forget-user
+- Persistence provider
+  - `filesystem` (default)
+  - `azure` (Blob + optional AI Search, build-flag gated)
+- Derived index
+  - local in-memory scoring for filesystem provider
+  - Azure AI Search when configured for azure provider
 
-### 7.2 Storage layout (reference)
-`/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{doc_name}.json`  
-`/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`  
+Source of truth is document/event/audit blobs/files. Search index is derived.
+
+## 5. Storage Layout (Reference)
+`/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`  
 `/tenants/{tenant_id}/users/{user_id}/events/{event_id}.json`  
-`/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`
+`/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`  
+`/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`
 
-Note: layout is conventional, but document categories remain profile-configurable.
+## 6. Policy Model
+Runtime behavior is configured from `config/policy.json`.
 
-## 8. Configuration Model (Service-Generic)
-The service behavior is driven by a profile registry, not hard-coded memory categories.
-
-### 8.1 Schema Registry
-Each schema is registered as:
-- `schema_id` (for example `memory.user.dynamic`)
-- `version` (for example `1.0.0`)
-- JSON Schema body
-- optional migration metadata
-
-### 8.2 Profile Registry
-A profile defines what an agent/product can read/write and how data is governed.
-
-Example profile (abridged):
+### 6.1 Policy File Shape
 ```json
 {
-  "profile_id": "project-copilot-v1",
-  "document_bindings": [
+  "policies": [
     {
-      "binding_id": "user_static",
-      "namespace": "user",
-      "path": "user_static.json",
-      "schema_id": "memory.user.static",
-      "schema_version": "1.0.0",
-      "max_chars": 12000,
-      "read_priority": 10,
-      "write_mode": "restricted_patch"
-    },
-    {
-      "binding_id": "user_dynamic",
-      "namespace": "user",
-      "path": "user_dynamic.json",
-      "schema_id": "memory.user.dynamic",
-      "schema_version": "1.0.0",
-      "max_chars": 18000,
-      "read_priority": 20,
-      "write_mode": "restricted_patch"
-    },
-    {
-      "binding_id": "project_doc",
-      "namespace": "projects",
-      "path_template": "{project_id}.json",
-      "schema_id": "memory.project",
-      "schema_version": "1.0.0",
-      "max_chars": 32000,
-      "read_priority": 30,
-      "write_mode": "restricted_patch"
+      "policy_id": "project-copilot-v1",
+      "document_bindings": [
+        {
+          "binding_id": "user_dynamic",
+          "namespace": "user",
+          "path": "user_dynamic.json",
+          "path_template": null,
+          "schema_id": "memory.user.dynamic",
+          "schema_version": "1.0.0",
+          "max_chars": 18000,
+          "read_priority": 20,
+          "write_mode": "restricted_patch",
+          "allowed_paths": ["/preferences", "/durable_facts", "/pending_confirmations", "/projects_index"],
+          "required_content_paths": ["/preferences"],
+          "max_content_chars": 14000,
+          "max_array_items": 300
+        }
+      ],
+      "retention_rules": {
+        "snapshots_days": 60,
+        "events_days": 365,
+        "audit_days": 365
+      }
     }
-  ],
-  "writable_path_rules": {
-    "user_dynamic": [
-      "/preferences",
-      "/durable_facts",
-      "/pending_confirmations"
-    ],
-    "project_doc": [
-      "/summary",
-      "/facets",
-      "/recent_notes"
-    ]
-  },
-  "retention_rules": {
-    "snapshots_days": 60,
-    "events_days": 365,
-    "audit_days": 365
-  },
-  "confidence_rules": {
-    "min_confidence_for_durable_fact": 0.80,
-    "min_confidence_for_auto_apply": 0.70
-  },
-  "compaction_rules": {
-    "user_dynamic": {
-      "max_preferences": 12,
-      "max_durable_facts": 80,
-      "max_pending_confirmations": 30
-    },
-    "project_doc": {
-      "max_recent_notes": 30
-    }
-  }
+  ]
 }
 ```
 
-## 9. Data Contracts
-### 9.1 Common Document Envelope
-All memory documents should include:
+### 6.2 Binding Semantics
+- `path` for fixed documents.
+- `path_template` for project-scoped documents (for example `{project_id}.json`).
+- `allowed_paths` controls writable `PATCH` paths.
+- `required_content_paths`, `max_content_chars`, and `max_array_items` enforce structure/size constraints.
+- `write_mode` controls replace permissions (`replace_allowed` required for `PUT`).
+
+## 7. Core Data Contracts
+### 7.1 Document Envelope
 ```json
 {
   "doc_id": "uuid",
   "schema_id": "memory.user.dynamic",
   "schema_version": "1.0.0",
-  "created_at": "2026-02-14T20:00:00Z",
-  "updated_at": "2026-02-14T20:00:00Z",
-  "updated_by": "service-or-job-id",
+  "created_at": "2026-02-15T00:00:00Z",
+  "updated_at": "2026-02-15T00:00:00Z",
+  "updated_by": "service-id",
   "content": {}
 }
 ```
 
-Rationale: envelope supports migrations and observability without constraining content semantics.
-
-### 9.2 Event Digest Record
+### 7.2 Event Digest
 ```json
 {
-  "event_id": "evt_01...",
+  "event_id": "evt_01",
   "tenant_id": "t1",
   "user_id": "u1",
   "service_id": "assistant-a",
-  "timestamp": "2026-02-14T20:00:00Z",
+  "timestamp": "2026-02-15T00:00:00Z",
   "source_type": "chat",
-  "digest": "User asked to split memory by contention and lifecycle.",
-  "keywords": ["memory", "config", "conflict"],
+  "digest": "short summary",
+  "keywords": ["memory"],
   "project_ids": ["project-alpha"],
   "snapshot_uri": "blob://...",
   "evidence": {
-    "message_ids": ["m12", "m13"],
-    "span": { "start": 12, "end": 13 }
+    "message_ids": ["m1"],
+    "start": 1,
+    "end": 2
   }
 }
 ```
 
-### 9.3 Replay Patch Record (internal)
+### 7.3 Replay Patch Record (Internal)
 ```json
 {
-  "replay_id": "rpl_01...",
+  "replay_id": "rpl_01",
   "target_binding_id": "user_dynamic",
   "target_path": "user_dynamic.json",
-  "base_etag": "\"0x8DE...\"",
+  "base_etag": "\"0x...\"",
   "ops": [
-    { "op": "add", "path": "/content/preferences/-", "value": "Prefer concise architecture diagrams." }
+    { "op": "add", "path": "/content/preferences/-", "value": "Prefer concise responses." }
   ],
-  "confidence": 0.82,
-  "evidence": {
-    "snapshot_uri": "blob://...",
-    "message_ids": ["m18"]
-  }
+  "snapshot_uri": "blob://...",
+  "message_ids": ["m1"]
 }
 ```
 
-## 10. API Specification
-All APIs are server-to-server and require authenticated service identity.
+## 8. API Specification
+All endpoints are server-to-server.
 
-### 10.1 Get Document
-`GET /v1/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`
+### 8.1 Get Document
+`GET /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
 
-`path` is a URL-encoded blob-relative path inside the namespace (for example `user_static.json` or `project-alpha.json`).
-
-Response:
-```json
-{
-  "etag": "\"0x8DE...\"",
-  "document": { "...": "..." }
-}
-```
-
-### 10.2 Patch Document
-`PATCH /v1/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`
+### 8.2 Patch Document
+`PATCH /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
 
 Headers:
-- `If-Match: <etag>` (required)
+- `If-Match` required.
 
-Request:
+Request body:
 ```json
 {
-  "profile_id": "project-copilot-v1",
+  "policy_id": "project-copilot-v1",
   "binding_id": "user_dynamic",
   "ops": [
-    { "op": "replace", "path": "/content/preferences/0", "value": "Use concise, direct answers." }
+    { "op": "replace", "path": "/content/preferences/0", "value": "Use concise answers." }
   ],
   "reason": "live_update",
   "evidence": {
     "conversation_id": "c_123",
-    "message_ids": ["m1"]
+    "message_ids": ["m1"],
+    "snapshot_uri": null
   }
 }
 ```
 
-Behavior:
-- Validates profile binding, schema, and writable paths.
-- Enforces size and field limits after patch application.
-- Returns `412 Precondition Failed` on ETag mismatch.
+### 8.3 Replace Document (Restricted)
+`PUT /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
 
-### 10.3 Replace Document (restricted)
-`PUT /v1/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`
+Requires `If-Match`. Allowed only when binding `write_mode == replace_allowed`.
 
-Use for migration/admin flows, usually not for direct LLM writes.
+### 8.4 Assemble Context
+`POST /v1/tenants/{tenantId}/users/{userId}/context:assemble`
 
-### 10.4 Assemble Context
-`POST /v1/tenants/{tenant_id}/users/{user_id}/context:assemble`
-
-Request:
+Request body:
 ```json
 {
-  "profile_id": "project-copilot-v1",
+  "policy_id": "project-copilot-v1",
   "conversation_hint": {
-    "text": "Need help with project alpha retrieval latency",
+    "text": "Need help with project alpha",
     "project_id": null
   },
-  "max_docs": 4
+  "max_docs": 4,
+  "max_chars_total": 30000
 }
 ```
 
-Response:
+Response includes:
+- `selected_project_id`
+- `documents[]`
+- `dropped_bindings[]`
+- `routing_debug`
+
+### 8.5 Write Event Digest
+`POST /v1/tenants/{tenantId}/users/{userId}/events`
+
+### 8.6 Search Events
+`POST /v1/tenants/{tenantId}/users/{userId}/events:search`
+
+Supports filtering by query/service/source/project/time range/top-k.
+
+### 8.7 Apply Retention
+`POST /v1/tenants/{tenantId}/users/{userId}/retention:apply`
+
+Request body:
 ```json
 {
-  "selected_project_id": "project-alpha",
-  "documents": [
-    {
-      "binding_id": "user_static",
-      "namespace": "user",
-      "path": "user_static.json",
-      "etag": "\"0x8...\"",
-      "document": { "...": "..." }
-    }
-  ],
-  "routing_debug": {
-    "deterministic_score": 0.93,
-    "semantic_score": 0.61,
-    "reason": "alias_match"
-  }
+  "policy_id": "project-copilot-v1",
+  "as_of_utc": null
 }
 ```
 
-### 10.5 Write Event Digest
-`POST /v1/tenants/{tenant_id}/users/{user_id}/events`
+### 8.8 Forget User
+`DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
 
-Writes event blob and upserts search index document.
+## 9. Validation Rules (Runtime)
+For patch/replace operations, the service enforces:
+- `If-Match` optimistic concurrency.
+- binding existence + namespace/path consistency.
+- `allowed_paths` allowlist checks for patch ops.
+- envelope `schema_id` and `schema_version` must match binding values.
+- total document size <= binding `max_chars`.
+- content size <= binding `max_content_chars` (if set).
+- required content paths present.
+- recursive array length <= binding `max_array_items` (if set).
+- max patch operation count per request (`100`).
 
-### 10.6 Search Events
-`POST /v1/tenants/{tenant_id}/users/{user_id}/events:search`
+## 10. Conflict Strategy
+Concurrency model is ETag-based optimistic concurrency:
+1. Reject stale write (`412 ETAG_MISMATCH`).
+2. Client refetches latest document/etag.
+3. Client rebases and retries.
 
-Request supports filters: time range, service, project, source_type, topK.
+Service does not perform multi-document transactions.
 
-### 10.7 Error Model
+## 11. Context Assembly Behavior
+- Bindings are read by ascending `read_priority`.
+- Project routing precedence:
+1. explicit `conversation_hint.project_id`
+2. deterministic alias/keyword match from `projects_index`
+3. fallback to no project selection
+- `max_docs` and `max_chars_total` budgets are enforced.
+- Dropped bindings are surfaced in response metadata.
+
+## 12. Retention and Deletion
+Retention is defined per policy via `retention_rules`.
+
+`retention:apply` removes expired:
+- event records
+- audit records
+- snapshots
+- derived search docs when enabled
+
+`DELETE /memory` removes all user-scoped:
+- documents
+- events
+- audits
+- snapshots
+- derived search docs when enabled
+
+## 13. Error Model
 Canonical status codes:
-- `400 Bad Request`: malformed payload or invalid operation syntax.
-- `401/403`: authentication or authorization failure.
-- `404 Not Found`: missing document/binding.
-- `412 Precondition Failed`: ETag mismatch.
-- `422 Unprocessable Entity`: schema validation, path policy, or limit violation.
-- `429 Too Many Requests`: per-user or per-service quota exceeded.
-- `500/503`: transient server/dependency failures.
+- `400` invalid request
+- `403` write mode / policy restrictions
+- `404` missing document or policy
+- `412` ETag mismatch
+- `422` validation or path-policy violations
+- `500/503` service/dependency failures
 
-Error payload shape:
+Error payload:
 ```json
 {
   "error": {
     "code": "ETAG_MISMATCH",
     "message": "If-Match does not match latest document version.",
-    "request_id": "req_01...",
+    "request_id": "...",
     "details": {
-      "latest_etag": "\"0x8DF...\""
+      "latest_etag": "\"...\""
     }
   }
 }
 ```
 
-## 11. Runtime Read Path
-At conversation start:
-1. Orchestrator calls `context:assemble` with profile and hint.
-2. Service resolves relevant docs in priority order.
-3. Service returns selected documents with ETags.
-4. Orchestrator injects docs into system context as memory artifacts.
+## 14. Security Boundary
+System-wide safety/compliance policy is outside user memory storage and not writable through memory APIs.
 
-Routing precedence:
-1. Explicit `project_id` if provided and valid.
-2. Deterministic alias/keyword match from routing document.
-3. Semantic disambiguation only when deterministic routing is ambiguous.
-4. No project document when confidence too low.
+`mem.net` enforces structural safety (path/shape/size/concurrency/audit), not global policy reasoning.
 
-Token budget policy:
-- `context:assemble` should support optional `max_chars_total` and `max_docs`.
-- If over budget, service drops lowest-priority bindings first.
-- Service should return `dropped_bindings` metadata so orchestration logs explain omissions.
-
-## 12. Runtime Write Path (Live)
-1. Agent proposes patch ops.
-2. Orchestrator sends patch with ETag.
-3. Memory API validates and applies atomically.
-4. API writes audit record and returns new ETag.
-
-Write safeguards:
-- Path allowlist per binding.
-- Denylist support for sensitive fields.
-- Max operation count per patch request.
-- Confidence threshold gates for durable sections.
-- Optional `pending_confirmation` redirection when confidence is insufficient.
-
-## 13. Post-Conversation Replay Flow
-1. Conversation snapshot stored as encrypted blob.
-2. Replay worker loads snapshot + current documents + profile config.
-3. Worker emits:
-   - event digest
-   - one or more patch requests with evidence and confidence
-4. API applies patches with If-Match.
-5. On `412`, worker refetches and rebases once, then retries.
-6. If second conflict remains, worker stores unresolved patch for manual/async retry.
-
-Replay output contract must remain structured (digest + patch + evidence + confidence), not free-form text.
-
-## 14. Conflict Strategy
-Use optimistic concurrency per document via Blob ETag.
-
-Conflict handling algorithm:
-1. Reject stale write (`412`).
-2. Client fetches latest document + ETag.
-3. Client rebases original ops to latest version.
-4. Retry once after rebase.
-5. Escalate unresolved conflicts to retry queue with backoff.
-
-Reasoning: simple, cloud-native, and sufficient for multi-service writers.
-
-## 15. Compaction and Size Management
-Compaction is profile-configurable and runs periodically.
-
-Actions:
-- Trim low-value `recent_notes` first.
-- Merge redundant preference/fact entries.
-- Move granular history to event digests only.
-- Preserve high-confidence durable facts with freshness metadata.
-
-Required limits:
-- `max_chars` per document binding.
-- max array lengths per logical section.
-- max total patch operations per request.
-
-## 16. Security and Privacy
-### 16.1 AuthN/AuthZ
-- Service-to-service auth with Entra ID.
-- Tenant-bound authorization checks on every call.
-- No cross-tenant reads/writes.
-
-### 16.2 Encryption
-- Encryption at rest for Blob and Search.
-- Snapshot payloads encrypted and access-controlled.
-- Optional CMK via Key Vault for regulated tenants.
-
-### 16.3 Data minimization
-- Store only durable and high-value memory.
-- Prefer digests + evidence pointers over verbose duplication.
-
-## 17. Retention and Deletion
-Retention is profile-configurable with organization-level ceilings.
-
-Recommended defaults:
-- snapshots: 30-90 days
-- events: 180-365 days
-- audit: >= 365 days (subject to policy)
-- memory documents: long-lived until user/tenant deletion
-
-Forget flow (`delete user memory`) must remove:
-- all documents
-- snapshots
-- event blobs
-- search index docs
-- audit records (unless legal hold applies)
-
-## 18. Safety Model
-The memory service enforces structural safety, not global policy reasoning.
-
-Structural safety includes:
-- allowed schemas only
-- writable path controls
-- confidence gates
-- concurrency safety and auditability
-
-Global policy enforcement remains in orchestrator/system prompts and policy services.
-
-## 19. Observability and SLOs
-### 19.1 Mandatory telemetry
+## 15. Observability Requirements
+Minimum telemetry:
 - request latency by endpoint
-- patch success/412/validation failure rates
-- per-binding size utilization
-- replay apply success rate
-- search latency and hit quality proxy metrics
+- patch success/error counts (`412`, `422`, etc.)
+- per-binding document size utilization
+- event search latency
+- retention/forget-user deletion counts
 
-### 19.2 Audit record fields
-- actor service/job identity
-- tenant/user
-- timestamp
-- target document binding/path
-- pre/post ETag
-- patch ops hash
-- evidence pointers
-- reason code (`live_update`, `replay_update`, `admin_migration`)
+Audit records include actor, tenant/user, target path, ETag transition, reason, and evidence pointers.
 
-### 19.3 Suggested SLO targets (initial)
-- p95 read latency < 150 ms (document cache warm)
-- p95 patch latency < 300 ms (excluding conflict retries)
-- replay success within 5 minutes for 99% of completed conversations
+## 16. Deployment Notes
+- Provider selected via `MemNet:Provider` or `MEMNET_PROVIDER`.
+- `filesystem` provider runs locally with no cloud dependencies.
+- `azure` provider requires Azure SDK build flag and Azure configuration.
+- If azure provider is selected without Azure SDK build flag, API returns `501 AZURE_PROVIDER_NOT_ENABLED`.
 
-### 19.4 Operational Alerts (minimum)
-- sustained `412` rate above threshold for any binding
-- schema validation failure spikes
-- replay backlog age above SLA
-- search indexing lag above SLA
+## 17. Deferred Extensions
+The following are intentionally deferred from v1 runtime core:
+- dedicated compaction worker and compaction-specific config
+- confidence-based write gating
+- external schema registry/migration orchestration
+- replay/reindex background orchestration
+- backend composition abstraction (`IMemoryBackend`)
 
-## 20. Deployment and Operations
-- Blue/green rollout for API and workers.
-- Schema registry supports additive versioning.
-- Migrations use `PUT` with privileged role and migration audit trail.
-- Reindex job can rebuild search from event blobs.
+## 18. Acceptance Criteria (v1)
+1. Policy-driven binding resolution and validation are enforced.
+2. Live patch and replace operations require `If-Match` and enforce ETag semantics.
+3. Context assembly returns deterministic routing output with budget handling.
+4. Event write and search APIs are functional.
+5. Retention and forget-user lifecycle endpoints are functional.
+6. Audit trail is produced for mutating document operations.
 
-## 21. Naming and Migration Guidance
-Current naming like `global.json` is semantically ambiguous. Prefer profile-configurable names, with recommended conventions:
-- `user_static.json`
-- `user_dynamic.json`
-- `projects/{project_id}.json`
+## 19. Implementation Status
+Current implementation satisfies v1 acceptance criteria and passes spec tests in `tests/MemNet.MemoryService.SpecTests`.
 
-Migration strategy:
-1. Introduce profile with new bindings.
-2. Backfill from old documents.
-3. Dual-read for one release window.
-4. Cut write traffic to new paths.
-5. Decommission legacy file after verification.
-
-## 22. Starter Profile (Recommended, Not Hard-Coded)
-This is a sample for real agents. It is guidance only.
-
-### 22.1 Suggested logical sections
-- `profile` (stable identity/context)
-- `preferences` (response/work style)
-- `durable_facts` (high-confidence, cross-session facts)
-- `pending_confirmations` (low-confidence candidate memories)
-- `projects_index` (routing metadata)
-
-### 22.2 Admission rules for durable facts
-A fact must satisfy all:
-1. useful beyond current session
-2. likely stable over time
-3. confidence >= configured threshold
-4. has evidence pointer
-5. passes sensitivity rules
-
-### 22.3 Freshness rules
-- add `last_verified_at`
-- optional `expires_at` or TTL class
-- stale facts can downgrade to `pending_confirmations`
-
-## 23. Risks and Mitigations
-1. Prompt-injected bad memory writes.
-- Mitigation: strict path controls + confidence gates + pending confirmations + audit.
-
-2. Silent factual drift over time.
-- Mitigation: evidence-linked writes + freshness metadata + periodic compaction.
-
-3. Multi-writer conflicts.
-- Mitigation: ETag + deterministic retry/rebase.
-
-4. Oversized documents reducing quality.
-- Mitigation: strict budgets + compaction + move detail to events.
-
-5. Weak event recall quality.
-- Mitigation: index digest + keywords/entities + pointers to snapshots.
-
-6. Privacy complexity with snapshots.
-- Mitigation: short retention + encrypted storage + complete delete flow.
-
-## 24. Open Decisions for Engineering Review
-1. Should replay unresolved conflicts go to human review queue or automated delayed retries only?
-2. Do we require confidence scoring from all writer clients, or only replay workers?
-3. What is the default retention profile for enterprise tenants with legal hold?
-4. Should `context:assemble` return routing debug data in production or behind debug flag?
-5. Which fields should be indexed as filterable/facetable in Azure AI Search v1?
-
-## 25. Acceptance Criteria (v1)
-1. Service supports profile-driven schema validation and writable path policies.
-2. Live patching uses required ETag semantics.
-3. Replay pipeline writes structured digests and evidence-linked patches.
-4. Context assembly works without exposing direct memory search tools to the LLM.
-5. Retention and forget-user flows are implemented and tested.
-6. Audit logs allow full reconstruction of memory mutations.
-
-## 26. Final Recommendation
-Proceed with a configurable memory platform and ship one starter profile first. Avoid hard-coding memory categories in service logic. Keep memory artifacts compact and enforce strict governance at write time. Expand profile variants only after usage data validates the need.

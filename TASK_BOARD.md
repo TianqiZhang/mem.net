@@ -12,8 +12,8 @@
 
 ## Phase 1 - Core Domain and Config
 - [x] Define domain contracts (documents, envelopes, events, replay patches)
-- [x] Implement schema/profile registry loaders
-- [x] Implement validation engine (schema + writable paths + limits + confidence)
+- [x] Implement policy loader (`policy.json`)
+- [x] Implement validation engine (binding allowlist + required paths + size limits)
 - [x] Implement ETag-based optimistic concurrency core services
 
 ## Phase 2 - Storage and Search Providers
@@ -37,7 +37,7 @@
 ## Phase 4 - Replay and Compaction Foundations
 - [x] Replay patch ingestion contract
 - [x] Conflict retry/rebase hook points
-- [x] Compaction service scaffolding
+- [ ] Compaction worker (deferred from runtime core)
 
 ## Phase 5 - Testing and Quality
 - [x] Build executable spec test harness
@@ -83,7 +83,18 @@
 - [x] Document Azure setup in `README.md` (auth, env vars, index bootstrap)
 - [x] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps
 
+## Phase 11 - First-Principles Simplification
+- [x] Collapse runtime config to a single policy model (`policy.json`)
+- [x] Move write/read validation constraints to binding-level policy fields
+- [x] Remove runtime schema registry and policy interfaces
+- [x] Remove request-time confidence gates from core mutation path
+- [x] Defer compaction from runtime core to future background work
+- [x] Rename API request selector fields from `profile_id` to `policy_id`
+- [x] Update spec tests to match simplified policy behavior
+
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)
+- [ ] Reintroduce compaction as optional background job with dedicated config
 - [ ] Add dedicated snapshot ingestion/store path beyond lifecycle cleanup hooks
+- [ ] Introduce `IMemoryBackend` to encapsulate provider-specific document/event/audit/search/lifecycle wiring and simplify startup composition

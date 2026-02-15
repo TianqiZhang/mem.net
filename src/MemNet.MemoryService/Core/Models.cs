@@ -41,17 +41,13 @@ public sealed record ReplayPatchRecord(
     string TargetPath,
     string BaseETag,
     IReadOnlyList<PatchOperation> Ops,
-    double Confidence,
     string SnapshotUri,
     IReadOnlyList<string> MessageIds);
 
-public sealed record ProfileConfig(
-    string ProfileId,
+public sealed record PolicyDefinition(
+    string PolicyId,
     IReadOnlyList<DocumentBinding> DocumentBindings,
-    IReadOnlyDictionary<string, IReadOnlyList<string>> WritablePathRules,
-    RetentionRules RetentionRules,
-    ConfidenceRules ConfidenceRules,
-    IReadOnlyDictionary<string, CompactionRule> CompactionRules);
+    RetentionRules RetentionRules);
 
 public sealed record DocumentBinding(
     string BindingId,
@@ -62,28 +58,15 @@ public sealed record DocumentBinding(
     string SchemaVersion,
     int MaxChars,
     int ReadPriority,
-    string WriteMode);
-
-public sealed record RetentionRules(int SnapshotsDays, int EventsDays, int AuditDays);
-
-public sealed record ConfidenceRules(double MinConfidenceForDurableFact, double MinConfidenceForAutoApply);
-
-public sealed record CompactionRule(
-    int? MaxPreferences,
-    int? MaxDurableFacts,
-    int? MaxPendingConfirmations,
-    int? MaxRecentNotes);
-
-public sealed record SchemaConfig(
-    string SchemaId,
-    string Version,
+    string WriteMode,
+    IReadOnlyList<string> AllowedPaths,
     IReadOnlyList<string> RequiredContentPaths,
     int? MaxContentChars,
     int? MaxArrayItems);
 
-public sealed record SchemaRegistry(IReadOnlyList<SchemaConfig> Schemas);
+public sealed record RetentionRules(int SnapshotsDays, int EventsDays, int AuditDays);
 
-public sealed record ProfileRegistry(IReadOnlyList<ProfileConfig> Profiles);
+public sealed record PolicyConfig(IReadOnlyList<PolicyDefinition> Policies);
 
 public sealed record MutationResponse(string ETag, DocumentEnvelope Document);
 

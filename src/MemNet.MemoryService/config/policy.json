@@ -1,7 +1,7 @@
 {
-  "profiles": [
+  "policies": [
     {
-      "profile_id": "project-copilot-v1",
+      "policy_id": "project-copilot-v1",
       "document_bindings": [
         {
           "binding_id": "user_static",
@@ -12,7 +12,13 @@
           "schema_version": "1.0.0",
           "max_chars": 12000,
           "read_priority": 10,
-          "write_mode": "restricted_patch"
+          "write_mode": "restricted_patch",
+          "allowed_paths": [],
+          "required_content_paths": [
+            "/profile"
+          ],
+          "max_content_chars": 8000,
+          "max_array_items": 200
         },
         {
           "binding_id": "user_dynamic",
@@ -23,7 +29,18 @@
           "schema_version": "1.0.0",
           "max_chars": 18000,
           "read_priority": 20,
-          "write_mode": "restricted_patch"
+          "write_mode": "restricted_patch",
+          "allowed_paths": [
+            "/preferences",
+            "/durable_facts",
+            "/pending_confirmations",
+            "/projects_index"
+          ],
+          "required_content_paths": [
+            "/preferences"
+          ],
+          "max_content_chars": 14000,
+          "max_array_items": 300
         },
         {
           "binding_id": "project_doc",
@@ -34,44 +51,23 @@
           "schema_version": "1.0.0",
           "max_chars": 32000,
           "read_priority": 30,
-          "write_mode": "restricted_patch"
+          "write_mode": "restricted_patch",
+          "allowed_paths": [
+            "/summary",
+            "/facets",
+            "/recent_notes"
+          ],
+          "required_content_paths": [
+            "/summary"
+          ],
+          "max_content_chars": 28000,
+          "max_array_items": 400
         }
       ],
-      "writable_path_rules": {
-        "user_dynamic": [
-          "/preferences",
-          "/durable_facts",
-          "/pending_confirmations",
-          "/projects_index"
-        ],
-        "project_doc": [
-          "/summary",
-          "/facets",
-          "/recent_notes"
-        ]
-      },
       "retention_rules": {
         "snapshots_days": 60,
         "events_days": 365,
         "audit_days": 365
-      },
-      "confidence_rules": {
-        "min_confidence_for_durable_fact": 0.80,
-        "min_confidence_for_auto_apply": 0.70
-      },
-      "compaction_rules": {
-        "user_dynamic": {
-          "max_preferences": 12,
-          "max_durable_facts": 80,
-          "max_pending_confirmations": 30,
-          "max_recent_notes": null
-        },
-        "project_doc": {
-          "max_preferences": null,
-          "max_durable_facts": null,
-          "max_pending_confirmations": null,
-          "max_recent_notes": 30
-        }
       }
     }
   ]

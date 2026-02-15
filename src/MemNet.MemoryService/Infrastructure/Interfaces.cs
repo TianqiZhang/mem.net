@@ -43,16 +43,6 @@ public interface IUserDataMaintenanceStore
         CancellationToken cancellationToken = default);
 }
 
-public interface IProfileRegistryProvider
-{
-    ProfileConfig GetProfile(string profileId);
-}
-
-public interface ISchemaRegistryProvider
-{
-    SchemaConfig GetSchema(string schemaId, string version);
-}
-
 public sealed record EventSearchRequest(
     string? Query,
     string? ServiceId,

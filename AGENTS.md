@@ -4,11 +4,16 @@
 Build and maintain `mem.net` as a robust, configurable memory service that is easy to evolve and safe to operate.
 
 ## Working Principles
-- Keep service logic generic; memory categories belong in profile config.
+- Keep service logic generic; memory categories belong in policy config.
 - Favor deterministic behavior over implicit magic.
 - Keep document writes auditable and conflict-safe.
 - Enforce strict validation and clear error contracts.
 - Keep documents bounded; move history/detail to events.
+
+## First-Principles Rule
+- Before introducing any new abstraction, state which core service capability it supports: slot resolution, write guardrails, deterministic context assembly, or lifecycle cleanup.
+- If a concept does not directly support one of those capabilities in production today, keep it out of the runtime model.
+- Prefer binding-local policy fields over cross-file registries or indirection unless there is a proven scaling need.
 
 ## Engineering Rules
 - Use .NET 8 and keep external dependencies minimal.
@@ -16,6 +21,11 @@ Build and maintain `mem.net` as a robust, configurable memory service that is ea
 - Keep APIs small and explicit; avoid hidden side effects.
 - Every mutating endpoint must enforce ETag optimistic concurrency semantics.
 - Every mutating endpoint must emit audit data.
+
+## Execution Environment Rule
+- In restricted sandbox sessions, `dotnet` restore/build/test/run workflows may fail with permission or process-launch errors.
+- Before running `dotnet` validation commands, ask the user to switch to full access mode.
+- If full access is not available, clearly report which `dotnet` checks could not be executed.
 
 ## Testing Rules
 - Add or update executable spec tests for every feature and regression.

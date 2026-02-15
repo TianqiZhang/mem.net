@@ -3,11 +3,11 @@
 `mem.net` is a configurable, Azure-oriented memory service for multi-agent systems.
 
 It provides:
-- Profile-driven memory documents (no hard-coded memory types)
+- Policy-driven memory documents (no hard-coded memory types)
 - Optimistic concurrency with ETags
 - Context assembly for orchestrators
 - Event digest write/search
-- Replay-ready update contracts with evidence and confidence
+- Replay-ready update contracts with evidence
 - Provider selection (`filesystem` default, `azure` available with Azure SDK build flag)
 
 ## Repository Layout
@@ -81,10 +81,10 @@ dotnet run --project src/MemNet.MemoryService -p:MemNetEnableAzureSdk=true
 ```
 
 ## Configuration
-Service behavior is driven by profiles and schemas loaded from `config/`:
-- schema registry
-- profile registry
-- path/write/retention/confidence/compaction rules
+Service behavior is driven by `config/policy.json`:
+- policies
+- binding-local write and validation rules (`allowed_paths`, `required_content_paths`, size limits)
+- retention rules
 - provider can be selected via `MemNet:Provider` or `MEMNET_PROVIDER`
 - Azure settings can be provided via `MemNet:Azure:*` or `MEMNET_AZURE_*` environment variables
 
@@ -103,8 +103,8 @@ When `MemNet:Azure:SearchEndpoint` and `MemNet:Azure:SearchIndexName` are set, e
 
 ## Lifecycle APIs
 - `POST /v1/tenants/{tenantId}/users/{userId}/retention:apply`
-  - body: `{ "profile_id": "...", "as_of_utc": null }`
-  - applies profile retention windows to events/audit/snapshots and Azure Search derived docs
+  - body: `{ "policy_id": "...", "as_of_utc": null }`
+  - applies policy retention windows to events/audit/snapshots and Azure Search derived docs
 - `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
   - removes all documents/events/audit/snapshots for the user scope (and search docs when enabled)
 

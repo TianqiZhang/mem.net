@@ -9,8 +9,7 @@ public sealed class MemoryCoordinator(
     IDocumentStore documentStore,
     IEventStore eventStore,
     IAuditStore auditStore,
-    IProfileRegistryProvider profileRegistry,
-    ISchemaRegistryProvider schemaRegistry,
+    PolicyRegistry policy,
     ILogger<MemoryCoordinator> logger)
 {
     private const int MaxOpsPerPatch = 100;
@@ -45,9 +44,9 @@ public sealed class MemoryCoordinator(
         Guard.True(request.Ops.Count > 0, "INVALID_PATCH", "Patch operations are required.", StatusCodes.Status400BadRequest);
         Guard.True(request.Ops.Count <= MaxOpsPerPatch, "PATCH_TOO_LARGE", "Patch operation count exceeds limit.", StatusCodes.Status422UnprocessableEntity);
 
-        var profile = profileRegistry.GetProfile(request.ProfileId);
-        var binding = ResolveBinding(profile, request.BindingId, key.Namespace, key.Path);
-        ValidateWritablePaths(profile, binding.BindingId, request.Ops);
+        var policyDefinition = policy.GetPolicy(request.PolicyId);
+        var binding = ResolveBinding(policyDefinition, request.BindingId, key.Namespace, key.Path);
+        ValidateWritablePaths(binding, request.Ops);
 
         var existing = await documentStore.GetAsync(key, cancellationToken);
         if (existing is null)
@@ -57,11 +56,6 @@ public sealed class MemoryCoordinator(
 
         var rawNode = JsonSerializer.SerializeToNode(existing.Envelope, JsonDefaults.Options) as JsonObject
             ?? throw new ApiException(StatusCodes.Status500InternalServerError, "SERIALIZATION_ERROR", "Failed to serialize existing envelope.");
-
-        if (request.Confidence.HasValue)
-        {
-            EnforceConfidence(request.Confidence.Value, request.Ops, profile);
-        }
 
         var patchedNode = JsonPatchEngine.Apply(rawNode, request.Ops);
         var patchedEnvelope = patchedNode.Deserialize<DocumentEnvelope>(JsonDefaults.Options)
@@ -109,18 +103,13 @@ public sealed class MemoryCoordinator(
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
 
-        var profile = profileRegistry.GetProfile(request.ProfileId);
-        var binding = ResolveBinding(profile, request.BindingId, key.Namespace, key.Path);
+        var policyDefinition = policy.GetPolicy(request.PolicyId);
+        var binding = ResolveBinding(policyDefinition, request.BindingId, key.Namespace, key.Path);
         Guard.True(
             string.Equals(binding.WriteMode, "replace_allowed", StringComparison.OrdinalIgnoreCase),
             "REPLACE_NOT_ALLOWED",
             "Replace is not allowed for this binding.",
             StatusCodes.Status403Forbidden);
-
-        if (request.Confidence.HasValue)
-        {
-            EnforceConfidence(request.Confidence.Value, Array.Empty<PatchOperation>(), profile);
-        }
 
         var now = DateTimeOffset.UtcNow;
         var replacement = request.Document with { UpdatedAt = now, UpdatedBy = actor };
@@ -153,18 +142,18 @@ public sealed class MemoryCoordinator(
         AssembleContextRequest request,
         CancellationToken cancellationToken = default)
     {
-        using var scope = BeginScope("context_assemble", tenantId, userId, profileId: request.ProfileId);
+        using var scope = BeginScope("context_assemble", tenantId, userId, policyId: request.PolicyId);
         logger.LogInformation("Assembling context.");
 
-        var profile = profileRegistry.GetProfile(request.ProfileId);
-        var sortedBindings = profile.DocumentBindings.OrderBy(x => x.ReadPriority).ToList();
+        var policyDefinition = policy.GetPolicy(request.PolicyId);
+        var sortedBindings = policyDefinition.DocumentBindings.OrderBy(x => x.ReadPriority).ToList();
 
         var selectedProjectId = request.ConversationHint?.ProjectId;
         var deterministicScore = 0d;
         var reason = "no_match";
         if (string.IsNullOrWhiteSpace(selectedProjectId))
         {
-            var routed = await TryRouteProjectAsync(tenantId, userId, profile, request.ConversationHint?.Text, cancellationToken);
+            var routed = await TryRouteProjectAsync(tenantId, userId, policyDefinition, request.ConversationHint?.Text, cancellationToken);
             selectedProjectId = routed.ProjectId;
             deterministicScore = routed.Score;
             reason = routed.Reason;
@@ -258,7 +247,7 @@ public sealed class MemoryCoordinator(
         string userId,
         string? @namespace = null,
         string? path = null,
-        string? profileId = null,
+        string? policyId = null,
         string? eventId = null)
     {
         return logger.BeginScope(new Dictionary<string, object?>
@@ -268,7 +257,7 @@ public sealed class MemoryCoordinator(
             ["user_id"] = userId,
             ["namespace"] = @namespace,
             ["path"] = path,
-            ["profile_id"] = profileId,
+            ["policy_id"] = policyId,
             ["event_id"] = eventId
         }) ?? NoopScope;
     }
@@ -282,8 +271,6 @@ public sealed class MemoryCoordinator(
 
     private void ValidateEnvelope(DocumentBinding binding, DocumentEnvelope envelope)
     {
-        var schema = schemaRegistry.GetSchema(binding.SchemaId, binding.SchemaVersion);
-
         Guard.True(
             string.Equals(envelope.SchemaId, binding.SchemaId, StringComparison.Ordinal),
             "SCHEMA_MISMATCH",
@@ -298,23 +285,23 @@ public sealed class MemoryCoordinator(
 
         var serialized = JsonSerializer.Serialize(envelope, JsonDefaults.Options);
         Guard.True(serialized.Length <= binding.MaxChars, "DOCUMENT_SIZE_EXCEEDED", "Document exceeds max_chars for binding.", StatusCodes.Status422UnprocessableEntity);
-        if (schema.MaxContentChars.HasValue)
+        if (binding.MaxContentChars.HasValue)
         {
             var contentSerialized = JsonSerializer.Serialize(envelope.Content, JsonDefaults.Options);
-            Guard.True(contentSerialized.Length <= schema.MaxContentChars.Value, "CONTENT_SIZE_EXCEEDED", "Document content exceeds schema max_content_chars.", StatusCodes.Status422UnprocessableEntity);
+            Guard.True(contentSerialized.Length <= binding.MaxContentChars.Value, "CONTENT_SIZE_EXCEEDED", "Document content exceeds binding max_content_chars.", StatusCodes.Status422UnprocessableEntity);
         }
 
-        foreach (var requiredPath in schema.RequiredContentPaths)
+        foreach (var requiredPath in binding.RequiredContentPaths)
         {
             if (!TryResolveContentPath(envelope.Content, requiredPath, out _))
             {
-                throw new ApiException(StatusCodes.Status422UnprocessableEntity, "SCHEMA_REQUIRED_PATH_MISSING", $"Required content path '{requiredPath}' was not found.");
+                throw new ApiException(StatusCodes.Status422UnprocessableEntity, "REQUIRED_PATH_MISSING", $"Required content path '{requiredPath}' was not found.");
             }
         }
 
-        if (schema.MaxArrayItems.HasValue)
+        if (binding.MaxArrayItems.HasValue)
         {
-            ValidateArrayLimits(envelope.Content, schema.MaxArrayItems.Value);
+            ValidateArrayLimits(envelope.Content, binding.MaxArrayItems.Value);
         }
     }
 
@@ -379,20 +366,6 @@ public sealed class MemoryCoordinator(
         return node is not null;
     }
 
-    private static void EnforceConfidence(double confidence, IReadOnlyList<PatchOperation> ops, ProfileConfig profile)
-    {
-        if (confidence >= profile.ConfidenceRules.MinConfidenceForAutoApply)
-        {
-            return;
-        }
-
-        var touchesDurableFacts = ops.Any(op => NormalizePath(op.Path).StartsWith("/durable_facts", StringComparison.Ordinal));
-        if (touchesDurableFacts)
-        {
-            throw new ApiException(StatusCodes.Status422UnprocessableEntity, "CONFIDENCE_TOO_LOW", "Confidence too low for durable_facts update.");
-        }
-    }
-
     private static string NormalizePath(string path)
     {
         var trimmed = path.Trim();
@@ -408,10 +381,10 @@ public sealed class MemoryCoordinator(
         return trimmed;
     }
 
-    private static DocumentBinding ResolveBinding(ProfileConfig profile, string bindingId, string @namespace, string path)
+    private static DocumentBinding ResolveBinding(PolicyDefinition policyDefinition, string bindingId, string @namespace, string path)
     {
-        var binding = profile.DocumentBindings.FirstOrDefault(x => string.Equals(x.BindingId, bindingId, StringComparison.Ordinal));
-        Guard.NotNull(binding, "BINDING_NOT_FOUND", $"Binding '{bindingId}' not found in profile.", StatusCodes.Status422UnprocessableEntity);
+        var binding = policyDefinition.DocumentBindings.FirstOrDefault(x => string.Equals(x.BindingId, bindingId, StringComparison.Ordinal));
+        Guard.NotNull(binding, "BINDING_NOT_FOUND", $"Binding '{bindingId}' not found in policy.", StatusCodes.Status422UnprocessableEntity);
         var resolvedBinding = binding!;
 
         Guard.True(string.Equals(resolvedBinding.Namespace, @namespace, StringComparison.Ordinal), "BINDING_NAMESPACE_MISMATCH", "Binding namespace does not match document namespace.", StatusCodes.Status422UnprocessableEntity);
@@ -444,17 +417,17 @@ public sealed class MemoryCoordinator(
         return binding.PathTemplate.Replace("{project_id}", projectId, StringComparison.Ordinal);
     }
 
-    private static void ValidateWritablePaths(ProfileConfig profile, string bindingId, IReadOnlyList<PatchOperation> ops)
+    private static void ValidateWritablePaths(DocumentBinding binding, IReadOnlyList<PatchOperation> ops)
     {
-        if (!profile.WritablePathRules.TryGetValue(bindingId, out var allowed))
+        if (binding.AllowedPaths.Count == 0)
         {
-            throw new ApiException(StatusCodes.Status403Forbidden, "WRITE_NOT_ALLOWED", $"No writable paths configured for binding '{bindingId}'.");
+            throw new ApiException(StatusCodes.Status403Forbidden, "WRITE_NOT_ALLOWED", $"No writable paths configured for binding '{binding.BindingId}'.");
         }
 
         foreach (var op in ops)
         {
             var normalizedPath = NormalizePath(op.Path);
-            var match = allowed.Any(allowedPath =>
+            var match = binding.AllowedPaths.Any(allowedPath =>
             {
                 var canonicalAllowed = allowedPath.StartsWith('/') ? allowedPath : "/" + allowedPath;
                 return normalizedPath.Equals(canonicalAllowed, StringComparison.Ordinal)
@@ -463,7 +436,7 @@ public sealed class MemoryCoordinator(
 
             if (!match)
             {
-                throw new ApiException(StatusCodes.Status422UnprocessableEntity, "PATH_NOT_WRITABLE", $"Patch path '{op.Path}' is not writable for binding '{bindingId}'.");
+                throw new ApiException(StatusCodes.Status422UnprocessableEntity, "PATH_NOT_WRITABLE", $"Patch path '{op.Path}' is not writable for binding '{binding.BindingId}'.");
             }
         }
     }
@@ -471,7 +444,7 @@ public sealed class MemoryCoordinator(
     private async Task<(string? ProjectId, double Score, string Reason)> TryRouteProjectAsync(
         string tenantId,
         string userId,
-        ProfileConfig profile,
+        PolicyDefinition policyDefinition,
         string? hintText,
         CancellationToken cancellationToken)
     {
@@ -488,7 +461,7 @@ public sealed class MemoryCoordinator(
         var topProjectId = default(string);
         var topScore = 0.0;
 
-        foreach (var binding in profile.DocumentBindings.Where(x => !string.IsNullOrWhiteSpace(x.Path)))
+        foreach (var binding in policyDefinition.DocumentBindings.Where(x => !string.IsNullOrWhiteSpace(x.Path)))
         {
             var key = new DocumentKey(tenantId, userId, binding.Namespace, binding.Path!);
             var doc = await documentStore.GetAsync(key, cancellationToken);

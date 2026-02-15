@@ -3,20 +3,18 @@ using System.Text.Json.Nodes;
 namespace MemNet.MemoryService.Core;
 
 public sealed record PatchDocumentRequest(
-    string ProfileId,
+    string PolicyId,
     string BindingId,
     IReadOnlyList<PatchOperation> Ops,
     string Reason,
-    EvidenceRef? Evidence,
-    double? Confidence);
+    EvidenceRef? Evidence);
 
 public sealed record ReplaceDocumentRequest(
-    string ProfileId,
+    string PolicyId,
     string BindingId,
     DocumentEnvelope Document,
     string Reason,
-    EvidenceRef? Evidence,
-    double? Confidence);
+    EvidenceRef? Evidence);
 
 public sealed record EvidenceRef(
     string? ConversationId,
@@ -24,7 +22,7 @@ public sealed record EvidenceRef(
     string? SnapshotUri);
 
 public sealed record AssembleContextRequest(
-    string ProfileId,
+    string PolicyId,
     ConversationHint? ConversationHint,
     int? MaxDocs,
     int? MaxCharsTotal);
@@ -63,7 +61,7 @@ public sealed record SearchEventsResponse(IReadOnlyList<EventDigest> Results);
 public sealed record WriteEventRequest(EventDigest Event);
 
 public sealed record ApplyRetentionRequest(
-    string ProfileId,
+    string PolicyId,
     DateTimeOffset? AsOfUtc);
 
 public sealed record ErrorEnvelope(ApiError Error);

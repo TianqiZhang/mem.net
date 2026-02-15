@@ -4,7 +4,7 @@ namespace MemNet.MemoryService.Core;
 
 public sealed class DataLifecycleService(
     IUserDataMaintenanceStore maintenanceStore,
-    IProfileRegistryProvider profileRegistry)
+    PolicyRegistry policy)
 {
     public Task<ForgetUserResult> ForgetUserAsync(
         string tenantId,
@@ -17,12 +17,12 @@ public sealed class DataLifecycleService(
     public Task<RetentionSweepResult> ApplyRetentionAsync(
         string tenantId,
         string userId,
-        string profileId,
+        string policyId,
         DateTimeOffset? asOfUtc,
         CancellationToken cancellationToken = default)
     {
-        var profile = profileRegistry.GetProfile(profileId);
+        var policyDefinition = policy.GetPolicy(policyId);
         var now = (asOfUtc ?? DateTimeOffset.UtcNow).ToUniversalTime();
-        return maintenanceStore.ApplyRetentionAsync(tenantId, userId, profile.RetentionRules, now, cancellationToken);
+        return maintenanceStore.ApplyRetentionAsync(tenantId, userId, policyDefinition.RetentionRules, now, cancellationToken);
     }
 }
