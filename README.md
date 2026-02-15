@@ -9,6 +9,7 @@ It provides:
 - Context assembly for orchestrators
 - Event digest write/search
 - Replay-ready update contracts with evidence and confidence
+- Provider selection (`filesystem` default, `azure` scaffold)
 
 ## Repository Layout
 - `MEMORY_SERVICE_SPEC.md`: detailed technical spec
@@ -40,12 +41,22 @@ dotnet run --project src/MemNet.MemoryService
 dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
 ```
 
+4. Optional: override roots/provider at runtime
+```bash
+MEMNET_DATA_ROOT=/tmp/memnet-data \
+MEMNET_CONFIG_ROOT=/Users/tianqi/code/mem.net/src/MemNet.MemoryService/config \
+MEMNET_PROVIDER=filesystem \
+dotnet run --project src/MemNet.MemoryService
+```
+
 ## Configuration
 Service behavior is driven by profiles and schemas loaded from `config/`:
 - schema registry
 - profile registry
 - path/write/retention/confidence/compaction rules
+- provider can be selected via `MemNet:Provider` or `MEMNET_PROVIDER`
 
 ## Notes
 - `NuGet.Config` clears external feeds so this repo can build in restricted/offline environments.
 - v1 implementation focuses on core acceptance criteria from the spec.
+- `azure` provider is scaffolded and currently returns `501 AZURE_PROVIDER_NOT_IMPLEMENTED` until Azure storage/search integrations are wired.

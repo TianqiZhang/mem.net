@@ -6,16 +6,39 @@ using Microsoft.AspNetCore.Mvc;
 var builder = WebApplication.CreateBuilder(args);
 
 var appRoot = builder.Environment.ContentRootPath;
+var configuredDataRoot = builder.Configuration["MemNet:DataRoot"] ?? Environment.GetEnvironmentVariable("MEMNET_DATA_ROOT");
+var configuredConfigRoot = builder.Configuration["MemNet:ConfigRoot"] ?? Environment.GetEnvironmentVariable("MEMNET_CONFIG_ROOT");
+var configuredProvider = builder.Configuration["MemNet:Provider"] ?? Environment.GetEnvironmentVariable("MEMNET_PROVIDER");
+
 var options = new StorageOptions
 {
-    DataRoot = Path.Combine(appRoot, "data"),
-    ConfigRoot = Path.Combine(appRoot, "config")
+    DataRoot = string.IsNullOrWhiteSpace(configuredDataRoot) ? Path.Combine(appRoot, "data") : configuredDataRoot,
+    ConfigRoot = string.IsNullOrWhiteSpace(configuredConfigRoot) ? Path.Combine(appRoot, "config") : configuredConfigRoot
 };
 
+var provider = string.IsNullOrWhiteSpace(configuredProvider)
+    ? "filesystem"
+    : configuredProvider.Trim().ToLowerInvariant();
+
 builder.Services.AddSingleton(options);
-builder.Services.AddSingleton<IDocumentStore, FileDocumentStore>();
-builder.Services.AddSingleton<IEventStore, FileEventStore>();
-builder.Services.AddSingleton<IAuditStore, FileAuditStore>();
+
+if (provider == "filesystem")
+{
+    builder.Services.AddSingleton<IDocumentStore, FileDocumentStore>();
+    builder.Services.AddSingleton<IEventStore, FileEventStore>();
+    builder.Services.AddSingleton<IAuditStore, FileAuditStore>();
+}
+else if (provider == "azure")
+{
+    builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
+    builder.Services.AddSingleton<IEventStore, AzureBlobEventStore>();
+    builder.Services.AddSingleton<IAuditStore, AzureBlobAuditStore>();
+}
+else
+{
+    throw new InvalidOperationException($"Unsupported provider '{provider}'.");
+}
+
 builder.Services.AddSingleton<IProfileRegistryProvider, FileRegistryProvider>();
 builder.Services.AddSingleton<ISchemaRegistryProvider, FileRegistryProvider>(sp => (FileRegistryProvider)sp.GetRequiredService<IProfileRegistryProvider>());
 builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();

@@ -1,3 +1,7 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using MemNet.MemoryService.Core;
 using MemNet.MemoryService.Infrastructure;
@@ -19,7 +23,8 @@ internal sealed class SpecRunner
             PatchDocumentReturns422OnPathPolicyViolationAsync,
             PatchDocumentReturns422OnLowConfidenceDurableFactsAsync,
             AssembleContextRoutesProjectAndRespectsBudgetsAsync,
-            EventSearchReturnsRelevantResultsAsync
+            EventSearchReturnsRelevantResultsAsync,
+            HttpEndpointsWorkEndToEndAsync
         ];
     }
 
@@ -270,6 +275,131 @@ internal sealed class SpecRunner
         Assert.True(search.Results.Count == 1, "Expected one filtered event result.");
         Assert.Equal("evt1", search.Results[0].EventId);
     }
+
+    private static async Task HttpEndpointsWorkEndToEndAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = host.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+
+        var getResponse = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var getPayload = JsonNode.Parse(await getResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected document payload.");
+        var etag = getPayload["etag"]?.GetValue<string>();
+        Assert.True(!string.IsNullOrWhiteSpace(etag), "Expected ETag from GET document.");
+
+        var patchPayload = new
+        {
+            profile_id = "project-copilot-v1",
+            binding_id = "user_dynamic",
+            ops = new[]
+            {
+                new { op = "replace", path = "/content/preferences/0", value = "HTTP patch updated preference." }
+            },
+            reason = "live_update",
+            evidence = new { conversation_id = "c-http", message_ids = new[] { "m1" }, snapshot_uri = (string?)null },
+            confidence = 0.9
+        };
+
+        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
+        {
+            Content = JsonContent.Create(patchPayload)
+        };
+        patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
+        patchRequest.Headers.TryAddWithoutValidation("Idempotency-Key", "http-idem-1");
+        patchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "http-spec-tests");
+
+        var patchResponse = await client.SendAsync(patchRequest);
+        Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
+        var patchBody = JsonNode.Parse(await patchResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected patch response payload.");
+        var newEtag = patchBody["etag"]?.GetValue<string>();
+        Assert.True(!string.IsNullOrWhiteSpace(newEtag), "Expected updated ETag from patch.");
+        Assert.True(!string.Equals(etag, newEtag, StringComparison.Ordinal), "Expected ETag to change after patch.");
+
+        var stalePatchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
+        {
+            Content = JsonContent.Create(new
+            {
+                profile_id = "project-copilot-v1",
+                binding_id = "user_dynamic",
+                ops = new[]
+                {
+                    new { op = "replace", path = "/content/preferences/0", value = "stale write" }
+                },
+                reason = "live_update"
+            })
+        };
+        stalePatchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
+        stalePatchRequest.Headers.TryAddWithoutValidation("Idempotency-Key", "http-idem-stale");
+        stalePatchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "http-spec-tests");
+
+        var staleResponse = await client.SendAsync(stalePatchRequest);
+        Assert.Equal(HttpStatusCode.PreconditionFailed, staleResponse.StatusCode);
+
+        var contextResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
+            new
+            {
+                profile_id = "project-copilot-v1",
+                conversation_hint = new { text = "Need alpha retrieval support", project_id = (string?)null },
+                max_docs = 4,
+                max_chars_total = 30000
+            });
+        Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
+        var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected context response.");
+        Assert.Equal("project-alpha", contextBody["selected_project_id"]?.GetValue<string>());
+
+        var now = DateTimeOffset.UtcNow;
+        var writeEventResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events",
+            new
+            {
+                @event = new
+                {
+                    event_id = "evt-http-1",
+                    tenant_id = scope.Keys.Tenant,
+                    user_id = scope.Keys.User,
+                    service_id = "http-spec-tests",
+                    timestamp = now,
+                    source_type = "chat",
+                    digest = "HTTP integration event for retrieval latency.",
+                    keywords = new[] { "retrieval", "latency" },
+                    project_ids = new[] { "project-alpha" },
+                    snapshot_uri = "blob://snapshots/http",
+                    evidence = new
+                    {
+                        message_ids = new[] { "m-http-1" },
+                        start = 1,
+                        end = 2
+                    }
+                }
+            });
+        Assert.Equal(HttpStatusCode.Accepted, writeEventResponse.StatusCode);
+
+        var searchResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events:search",
+            new
+            {
+                query = "latency",
+                service_id = "http-spec-tests",
+                source_type = "chat",
+                project_id = "project-alpha",
+                top_k = 5
+            });
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+        var searchBody = JsonNode.Parse(await searchResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected event search response.");
+        var results = searchBody["results"] as JsonArray ?? throw new Exception("Expected results array.");
+        Assert.True(results.Count >= 1, "Expected at least one event search result.");
+    }
 }
 
 internal static class Assert
@@ -313,15 +443,21 @@ internal static class Assert
 
 internal sealed class TestScope : IDisposable
 {
+    private readonly string _repoRoot;
     private readonly string _dataRoot;
+    private readonly string _configRoot;
 
     public TestScope(
+        string repoRoot,
         string dataRoot,
+        string configRoot,
         IDocumentStore documentStore,
         MemoryCoordinator coordinator,
         TestKeys keys)
     {
+        _repoRoot = repoRoot;
         _dataRoot = dataRoot;
+        _configRoot = configRoot;
         DocumentStore = documentStore;
         Coordinator = coordinator;
         Keys = keys;
@@ -332,6 +468,12 @@ internal sealed class TestScope : IDisposable
     public MemoryCoordinator Coordinator { get; }
 
     public TestKeys Keys { get; }
+
+    public string RepoRoot => _repoRoot;
+
+    public string DataRoot => _dataRoot;
+
+    public string ConfigRoot => _configRoot;
 
     public static TestScope Create()
     {
@@ -361,7 +503,7 @@ internal sealed class TestScope : IDisposable
         var keys = new TestKeys("tenant-1", "user-1");
         SeedDocuments(documentStore, keys).GetAwaiter().GetResult();
 
-        return new TestScope(dataRoot, documentStore, coordinator, keys);
+        return new TestScope(repoRoot, dataRoot, configRoot, documentStore, coordinator, keys);
     }
 
     public void Dispose()
@@ -442,6 +584,109 @@ internal sealed class TestScope : IDisposable
         await documentStore.UpsertAsync(keys.UserStatic, userStatic, "*", default);
         await documentStore.UpsertAsync(keys.UserDynamic, userDynamic, "*", default);
         await documentStore.UpsertAsync(keys.ProjectAlpha, projectDoc, "*", default);
+    }
+}
+
+internal sealed class ServiceHost : IDisposable
+{
+    private readonly Process _process;
+
+    private ServiceHost(Process process, Uri baseAddress)
+    {
+        _process = process;
+        BaseAddress = baseAddress;
+    }
+
+    public Uri BaseAddress { get; }
+
+    public static async Task<ServiceHost> StartAsync(string repoRoot, string dataRoot, string configRoot)
+    {
+        var port = ReserveFreePort();
+        var baseAddress = new Uri($"http://127.0.0.1:{port}");
+        var baseAddressForHosting = $"http://127.0.0.1:{port}";
+        var serviceDll = Path.Combine(repoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "net8.0", "MemNet.MemoryService.dll");
+        if (!File.Exists(serviceDll))
+        {
+            throw new Exception($"Service DLL not found for integration host: {serviceDll}");
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"\"{serviceDll}\"",
+            WorkingDirectory = repoRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+
+        startInfo.Environment["ASPNETCORE_URLS"] = baseAddressForHosting;
+        startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        startInfo.Environment["MEMNET_DATA_ROOT"] = dataRoot;
+        startInfo.Environment["MEMNET_CONFIG_ROOT"] = configRoot;
+
+        var process = new Process { StartInfo = startInfo };
+        process.Start();
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromMilliseconds(500) };
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(12);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (process.HasExited)
+            {
+                var stderr = await process.StandardError.ReadToEndAsync();
+                var stdout = await process.StandardOutput.ReadToEndAsync();
+                throw new Exception($"Service process exited early. stdout: {stdout} stderr: {stderr}");
+            }
+
+            try
+            {
+                var response = await client.GetAsync(new Uri(baseAddress, "/"));
+                if (response.StatusCode == HttpStatusCode.OK)
+                {
+                    return new ServiceHost(process, baseAddress);
+                }
+            }
+            catch
+            {
+                // retry until deadline
+            }
+
+            await Task.Delay(200);
+        }
+
+        process.Kill(true);
+        var timeoutStdErr = await process.StandardError.ReadToEndAsync();
+        var timeoutStdOut = await process.StandardOutput.ReadToEndAsync();
+        throw new Exception($"Service host did not become healthy before timeout. stdout: {timeoutStdOut} stderr: {timeoutStdErr}");
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill(true);
+                _process.WaitForExit(5000);
+            }
+        }
+        catch
+        {
+            // best-effort cleanup
+        }
+
+        _process.Dispose();
+    }
+
+    private static int ReserveFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 }
 

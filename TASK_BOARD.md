@@ -48,3 +48,9 @@
 - [x] Run full build/tests
 - [x] Review against acceptance criteria in spec
 - [x] Polish docs and mark remaining gaps
+
+## Phase 7 - Hardening and Providers
+- [x] Add HTTP-level integration tests (real service process)
+- [x] Add runtime configuration overrides for data/config roots
+- [x] Add provider selection wiring (`filesystem` / `azure`)
+- [x] Add Azure provider scaffolding behind store interfaces
