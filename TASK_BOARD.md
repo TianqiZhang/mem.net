@@ -14,7 +14,7 @@
 - [x] Define domain contracts (documents, envelopes, events, replay patches)
 - [x] Implement schema/profile registry loaders
 - [x] Implement validation engine (schema + writable paths + limits + confidence)
-- [x] Implement ETag and idempotency core services
+- [x] Implement ETag-based optimistic concurrency core services
 
 ## Phase 2 - Storage and Search Providers
 - [x] Implement document store abstraction
@@ -42,7 +42,7 @@
 ## Phase 5 - Testing and Quality
 - [x] Build executable spec test harness
 - [x] Add happy path API tests
-- [x] Add negative tests (`412`, `409`, `422`, `404`)
+- [x] Add negative tests (`412`, `422`, `404`)
 - [x] Add context routing and budget tests
 - [x] Add event search tests
 - [x] Add retention and forget-user endpoint tests

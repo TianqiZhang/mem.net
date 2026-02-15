@@ -14,7 +14,7 @@ Build and maintain `mem.net` as a robust, configurable memory service that is ea
 - Use .NET 8 and keep external dependencies minimal.
 - Prefer pure domain services over framework-coupled code.
 - Keep APIs small and explicit; avoid hidden side effects.
-- Every mutating endpoint must enforce ETag + idempotency semantics.
+- Every mutating endpoint must enforce ETag optimistic concurrency semantics.
 - Every mutating endpoint must emit audit data.
 
 ## Testing Rules

@@ -43,8 +43,7 @@ public sealed record ReplayPatchRecord(
     IReadOnlyList<PatchOperation> Ops,
     double Confidence,
     string SnapshotUri,
-    IReadOnlyList<string> MessageIds,
-    string IdempotencyKey);
+    IReadOnlyList<string> MessageIds);
 
 public sealed record ProfileConfig(
     string ProfileId,
@@ -86,19 +85,7 @@ public sealed record SchemaRegistry(IReadOnlyList<SchemaConfig> Schemas);
 
 public sealed record ProfileRegistry(IReadOnlyList<ProfileConfig> Profiles);
 
-public sealed record IdempotencyResult(
-    IdempotencyState State,
-    MutationResponse? ExistingResponse,
-    string? ExistingPayloadHash);
-
-public enum IdempotencyState
-{
-    Started,
-    Replayed,
-    Conflict
-}
-
-public sealed record MutationResponse(string ETag, DocumentEnvelope Document, bool IdempotencyReplay = false);
+public sealed record MutationResponse(string ETag, DocumentEnvelope Document);
 
 public sealed record ForgetUserResult(
     int DocumentsDeleted,

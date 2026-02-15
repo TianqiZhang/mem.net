@@ -53,13 +53,6 @@ public interface ISchemaRegistryProvider
     SchemaConfig GetSchema(string schemaId, string version);
 }
 
-public interface IIdempotencyStore
-{
-    IdempotencyResult Begin(string key, string payloadHash);
-
-    void Complete(string key, string payloadHash, MutationResponse response);
-}
-
 public sealed record EventSearchRequest(
     string? Query,
     string? ServiceId,

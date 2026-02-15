@@ -46,7 +46,6 @@ else
 
 builder.Services.AddSingleton<IProfileRegistryProvider, FileRegistryProvider>();
 builder.Services.AddSingleton<ISchemaRegistryProvider, FileRegistryProvider>(sp => (FileRegistryProvider)sp.GetRequiredService<IProfileRegistryProvider>());
-builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 builder.Services.AddSingleton<MemoryCoordinator>();
 builder.Services.AddSingleton<ReplayService>();
 builder.Services.AddSingleton<CompactionService>();
@@ -115,19 +114,17 @@ app.MapPatch("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**pat
     var decodedPath = Uri.UnescapeDataString(path);
     var key = new DocumentKey(tenantId, userId, namespaceName, decodedPath);
     var ifMatch = httpContext.Request.Headers.IfMatch.ToString();
-    var idempotencyKey = httpContext.Request.Headers["Idempotency-Key"].ToString();
     var actor = httpContext.Request.Headers["X-Service-Id"].ToString();
     if (string.IsNullOrWhiteSpace(actor))
     {
         actor = "unknown-service";
     }
 
-    var result = await coordinator.PatchDocumentAsync(key, request, ifMatch, idempotencyKey, actor, cancellationToken);
+    var result = await coordinator.PatchDocumentAsync(key, request, ifMatch, actor, cancellationToken);
     return Results.Ok(new
     {
         etag = result.ETag,
-        document = result.Document,
-        idempotency_replay = result.IdempotencyReplay
+        document = result.Document
     });
 });
 
@@ -144,19 +141,17 @@ app.MapPut("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**path}
     var decodedPath = Uri.UnescapeDataString(path);
     var key = new DocumentKey(tenantId, userId, namespaceName, decodedPath);
     var ifMatch = httpContext.Request.Headers.IfMatch.ToString();
-    var idempotencyKey = httpContext.Request.Headers["Idempotency-Key"].ToString();
     var actor = httpContext.Request.Headers["X-Service-Id"].ToString();
     if (string.IsNullOrWhiteSpace(actor))
     {
         actor = "unknown-service";
     }
 
-    var result = await coordinator.ReplaceDocumentAsync(key, request, ifMatch, idempotencyKey, actor, cancellationToken);
+    var result = await coordinator.ReplaceDocumentAsync(key, request, ifMatch, actor, cancellationToken);
     return Results.Ok(new
     {
         etag = result.ETag,
-        document = result.Document,
-        idempotency_replay = result.IdempotencyReplay
+        document = result.Document
     });
 });
 

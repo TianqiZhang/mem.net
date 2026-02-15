@@ -60,7 +60,7 @@ User-level guidance may be stored as memory, but it must be explicitly classifie
   - document read/write/patch
   - context assembly
   - schema/path/size validation
-  - ETag and idempotency enforcement
+  - ETag enforcement for optimistic concurrency
 - Blob Storage (source of truth):
   - documents
   - snapshots
@@ -217,8 +217,7 @@ Rationale: envelope supports migrations and observability without constraining c
   "evidence": {
     "snapshot_uri": "blob://...",
     "message_ids": ["m18"]
-  },
-  "idempotency_key": "replay-rpl_01-user_dynamic"
+  }
 }
 ```
 
@@ -243,7 +242,6 @@ Response:
 
 Headers:
 - `If-Match: <etag>` (required)
-- `Idempotency-Key: <key>` (required)
 
 Request:
 ```json
@@ -265,7 +263,6 @@ Behavior:
 - Validates profile binding, schema, and writable paths.
 - Enforces size and field limits after patch application.
 - Returns `412 Precondition Failed` on ETag mismatch.
-- Returns `409 Conflict` for idempotency-key reuse with different payload.
 
 ### 10.3 Replace Document (restricted)
 `PUT /v1/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`
@@ -323,7 +320,6 @@ Canonical status codes:
 - `400 Bad Request`: malformed payload or invalid operation syntax.
 - `401/403`: authentication or authorization failure.
 - `404 Not Found`: missing document/binding.
-- `409 Conflict`: idempotency key reused with non-identical payload.
 - `412 Precondition Failed`: ETag mismatch.
 - `422 Unprocessable Entity`: schema validation, path policy, or limit violation.
 - `429 Too Many Requests`: per-user or per-service quota exceeded.
@@ -363,7 +359,7 @@ Token budget policy:
 
 ## 12. Runtime Write Path (Live)
 1. Agent proposes patch ops.
-2. Orchestrator sends patch with ETag + idempotency key.
+2. Orchestrator sends patch with ETag.
 3. Memory API validates and applies atomically.
 4. API writes audit record and returns new ETag.
 
@@ -393,7 +389,7 @@ Conflict handling algorithm:
 1. Reject stale write (`412`).
 2. Client fetches latest document + ETag.
 3. Client rebases original ops to latest version.
-4. Retry once with same idempotency key lineage.
+4. Retry once after rebase.
 5. Escalate unresolved conflicts to retry queue with backoff.
 
 Reasoning: simple, cloud-native, and sufficient for multi-service writers.
@@ -450,7 +446,7 @@ Structural safety includes:
 - allowed schemas only
 - writable path controls
 - confidence gates
-- idempotency and auditability
+- concurrency safety and auditability
 
 Global policy enforcement remains in orchestrator/system prompts and policy services.
 
@@ -458,7 +454,6 @@ Global policy enforcement remains in orchestrator/system prompts and policy serv
 ### 19.1 Mandatory telemetry
 - request latency by endpoint
 - patch success/412/validation failure rates
-- idempotency conflict rate
 - per-binding size utilization
 - replay apply success rate
 - search latency and hit quality proxy metrics
@@ -534,7 +529,7 @@ A fact must satisfy all:
 - Mitigation: evidence-linked writes + freshness metadata + periodic compaction.
 
 3. Multi-writer conflicts.
-- Mitigation: ETag + deterministic retry/rebase + idempotency keys.
+- Mitigation: ETag + deterministic retry/rebase.
 
 4. Oversized documents reducing quality.
 - Mitigation: strict budgets + compaction + move detail to events.
@@ -554,7 +549,7 @@ A fact must satisfy all:
 
 ## 25. Acceptance Criteria (v1)
 1. Service supports profile-driven schema validation and writable path policies.
-2. Live patching uses required ETag and idempotency semantics.
+2. Live patching uses required ETag semantics.
 3. Replay pipeline writes structured digests and evidence-linked patches.
 4. Context assembly works without exposing direct memory search tools to the LLM.
 5. Retention and forget-user flows are implemented and tested.

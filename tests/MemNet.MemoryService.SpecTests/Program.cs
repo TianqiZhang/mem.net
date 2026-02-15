@@ -20,7 +20,6 @@ internal sealed class SpecRunner
         [
             PatchDocumentHappyPathAsync,
             PatchDocumentReturns412OnEtagMismatchAsync,
-            PatchDocumentReturns409OnIdempotencyConflictAsync,
             PatchDocumentReturns422OnPathPolicyViolationAsync,
             PatchDocumentReturns422OnLowConfidenceDurableFactsAsync,
             AssembleContextRoutesProjectAndRespectsBudgetsAsync,
@@ -77,7 +76,6 @@ internal sealed class SpecRunner
                 Evidence: new EvidenceRef("conv1", ["m1"], null),
                 Confidence: 0.9),
             ifMatch: seeded.ETag,
-            idempotencyKey: "idem-happy",
             actor: "spec-tests");
 
         Assert.True(result.ETag != seeded.ETag, "ETag should change after patch.");
@@ -106,56 +104,9 @@ internal sealed class SpecRunner
                         Evidence: null,
                         Confidence: 0.9),
                     ifMatch: "\"stale\"",
-                    idempotencyKey: "idem-etag",
                     actor: "spec-tests");
             },
             ex => ex.StatusCode == 412 && ex.Code == "ETAG_MISMATCH");
-    }
-
-    private static async Task PatchDocumentReturns409OnIdempotencyConflictAsync()
-    {
-        using var scope = TestScope.Create();
-        var key = scope.Keys.UserDynamic;
-        var seeded = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Seeded user_dynamic missing.");
-
-        await scope.Coordinator.PatchDocumentAsync(
-            key,
-            new PatchDocumentRequest(
-                ProfileId: "project-copilot-v1",
-                BindingId: "user_dynamic",
-                Ops:
-                [
-                    new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Version A"))
-                ],
-                Reason: "live_update",
-                Evidence: null,
-                Confidence: 0.9),
-            ifMatch: seeded.ETag,
-            idempotencyKey: "idem-conflict",
-            actor: "spec-tests");
-
-        var latest = await scope.DocumentStore.GetAsync(key) ?? throw new Exception("Updated user_dynamic missing.");
-
-        await Assert.ThrowsAsync<ApiException>(
-            async () =>
-            {
-                await scope.Coordinator.PatchDocumentAsync(
-                    key,
-                    new PatchDocumentRequest(
-                        ProfileId: "project-copilot-v1",
-                        BindingId: "user_dynamic",
-                        Ops:
-                        [
-                            new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Version B"))
-                        ],
-                        Reason: "live_update",
-                        Evidence: null,
-                        Confidence: 0.9),
-                    ifMatch: latest.ETag,
-                    idempotencyKey: "idem-conflict",
-                    actor: "spec-tests");
-            },
-            ex => ex.StatusCode == 409 && ex.Code == "IDEMPOTENCY_CONFLICT");
     }
 
     private static async Task PatchDocumentReturns422OnPathPolicyViolationAsync()
@@ -180,7 +131,6 @@ internal sealed class SpecRunner
                         Evidence: null,
                         Confidence: 0.9),
                     ifMatch: seeded.ETag,
-                    idempotencyKey: "idem-path-policy",
                     actor: "spec-tests");
             },
             ex => ex.StatusCode == 422 && ex.Code == "PATH_NOT_WRITABLE");
@@ -208,7 +158,6 @@ internal sealed class SpecRunner
                         Evidence: null,
                         Confidence: 0.2),
                     ifMatch: seeded.ETag,
-                    idempotencyKey: "idem-confidence",
                     actor: "spec-tests");
             },
             ex => ex.StatusCode == 422 && ex.Code == "CONFIDENCE_TOO_LOW");
@@ -317,7 +266,6 @@ internal sealed class SpecRunner
             Content = JsonContent.Create(patchPayload)
         };
         patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
-        patchRequest.Headers.TryAddWithoutValidation("Idempotency-Key", "http-idem-1");
         patchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "http-spec-tests");
 
         var patchResponse = await client.SendAsync(patchRequest);
@@ -342,7 +290,6 @@ internal sealed class SpecRunner
             })
         };
         stalePatchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
-        stalePatchRequest.Headers.TryAddWithoutValidation("Idempotency-Key", "http-idem-stale");
         stalePatchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "http-spec-tests");
 
         var staleResponse = await client.SendAsync(stalePatchRequest);
@@ -539,7 +486,6 @@ internal sealed class SpecRunner
             })
         };
         patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
-        patchRequest.Headers.TryAddWithoutValidation("Idempotency-Key", "forget-flow-idem");
         patchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "spec-tests");
         var patchResponse = await client.SendAsync(patchRequest);
         Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
@@ -750,14 +696,12 @@ internal sealed class TestScope : IDisposable
         var eventStore = new FileEventStore(options);
         var auditStore = new FileAuditStore(options);
         var registry = new FileRegistryProvider(options);
-        var idempotency = new InMemoryIdempotencyStore();
         var coordinator = new MemoryCoordinator(
             documentStore,
             eventStore,
             auditStore,
             registry,
             registry,
-            idempotency,
             NullLogger<MemoryCoordinator>.Instance);
 
         var keys = new TestKeys("tenant-1", "user-1");

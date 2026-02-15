@@ -485,36 +485,3 @@ public sealed class FileRegistryProvider : IProfileRegistryProvider, ISchemaRegi
         throw new ApiException(StatusCodes.Status422UnprocessableEntity, "SCHEMA_NOT_FOUND", $"Schema '{schemaId}:{version}' was not found.");
     }
 }
-
-public sealed class InMemoryIdempotencyStore : IIdempotencyStore
-{
-    private sealed record Entry(string PayloadHash, MutationResponse? Response);
-
-    private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-
-    public IdempotencyResult Begin(string key, string payloadHash)
-    {
-        while (true)
-        {
-            if (_entries.TryGetValue(key, out var existing))
-            {
-                if (!string.Equals(existing.PayloadHash, payloadHash, StringComparison.Ordinal))
-                {
-                    return new IdempotencyResult(IdempotencyState.Conflict, null, existing.PayloadHash);
-                }
-
-                return new IdempotencyResult(IdempotencyState.Replayed, existing.Response, existing.PayloadHash);
-            }
-
-            if (_entries.TryAdd(key, new Entry(payloadHash, null)))
-            {
-                return new IdempotencyResult(IdempotencyState.Started, null, null);
-            }
-        }
-    }
-
-    public void Complete(string key, string payloadHash, MutationResponse response)
-    {
-        _entries[key] = new Entry(payloadHash, response);
-    }
-}

@@ -5,7 +5,6 @@
 It provides:
 - Profile-driven memory documents (no hard-coded memory types)
 - Optimistic concurrency with ETags
-- Idempotent writes
 - Context assembly for orchestrators
 - Event digest write/search
 - Replay-ready update contracts with evidence and confidence

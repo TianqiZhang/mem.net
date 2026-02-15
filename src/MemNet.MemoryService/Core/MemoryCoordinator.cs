@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MemNet.MemoryService.Infrastructure;
@@ -13,7 +11,6 @@ public sealed class MemoryCoordinator(
     IAuditStore auditStore,
     IProfileRegistryProvider profileRegistry,
     ISchemaRegistryProvider schemaRegistry,
-    IIdempotencyStore idempotencyStore,
     ILogger<MemoryCoordinator> logger)
 {
     private const int MaxOpsPerPatch = 100;
@@ -38,7 +35,6 @@ public sealed class MemoryCoordinator(
         DocumentKey key,
         PatchDocumentRequest request,
         string ifMatch,
-        string idempotencyKey,
         string actor,
         CancellationToken cancellationToken = default)
     {
@@ -46,26 +42,8 @@ public sealed class MemoryCoordinator(
         logger.LogInformation("Patching document.");
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
-        Guard.True(!string.IsNullOrWhiteSpace(idempotencyKey), "MISSING_IDEMPOTENCY_KEY", "Idempotency-Key header is required.", StatusCodes.Status400BadRequest);
         Guard.True(request.Ops.Count > 0, "INVALID_PATCH", "Patch operations are required.", StatusCodes.Status400BadRequest);
         Guard.True(request.Ops.Count <= MaxOpsPerPatch, "PATCH_TOO_LARGE", "Patch operation count exceeds limit.", StatusCodes.Status422UnprocessableEntity);
-
-        var payloadHash = ComputeHash(JsonSerializer.Serialize(new { key, request, ifMatch }, JsonDefaults.Options));
-        var idem = idempotencyStore.Begin(idempotencyKey, payloadHash);
-        if (idem.State == IdempotencyState.Conflict)
-        {
-            throw new ApiException(StatusCodes.Status409Conflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key already used with different payload.");
-        }
-
-        if (idem.State == IdempotencyState.Replayed)
-        {
-            if (idem.ExistingResponse is null)
-            {
-                throw new ApiException(StatusCodes.Status409Conflict, "IDEMPOTENCY_PENDING", "Existing idempotent request is still pending.");
-            }
-
-            return idem.ExistingResponse with { IdempotencyReplay = true };
-        }
 
         var profile = profileRegistry.GetProfile(request.ProfileId);
         var binding = ResolveBinding(profile, request.BindingId, key.Namespace, key.Path);
@@ -115,7 +93,6 @@ public sealed class MemoryCoordinator(
             Timestamp: now,
             EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
 
-        idempotencyStore.Complete(idempotencyKey, payloadHash, response);
         logger.LogInformation("Patch completed.");
         return response;
     }
@@ -124,7 +101,6 @@ public sealed class MemoryCoordinator(
         DocumentKey key,
         ReplaceDocumentRequest request,
         string ifMatch,
-        string idempotencyKey,
         string actor,
         CancellationToken cancellationToken = default)
     {
@@ -132,24 +108,6 @@ public sealed class MemoryCoordinator(
         logger.LogInformation("Replacing document.");
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
-        Guard.True(!string.IsNullOrWhiteSpace(idempotencyKey), "MISSING_IDEMPOTENCY_KEY", "Idempotency-Key header is required.", StatusCodes.Status400BadRequest);
-
-        var payloadHash = ComputeHash(JsonSerializer.Serialize(new { key, request, ifMatch }, JsonDefaults.Options));
-        var idem = idempotencyStore.Begin(idempotencyKey, payloadHash);
-        if (idem.State == IdempotencyState.Conflict)
-        {
-            throw new ApiException(StatusCodes.Status409Conflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key already used with different payload.");
-        }
-
-        if (idem.State == IdempotencyState.Replayed)
-        {
-            if (idem.ExistingResponse is null)
-            {
-                throw new ApiException(StatusCodes.Status409Conflict, "IDEMPOTENCY_PENDING", "Existing idempotent request is still pending.");
-            }
-
-            return idem.ExistingResponse with { IdempotencyReplay = true };
-        }
 
         var profile = profileRegistry.GetProfile(request.ProfileId);
         var binding = ResolveBinding(profile, request.BindingId, key.Namespace, key.Path);
@@ -185,7 +143,6 @@ public sealed class MemoryCoordinator(
             Timestamp: now,
             EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
 
-        idempotencyStore.Complete(idempotencyKey, payloadHash, response);
         logger.LogInformation("Replace completed.");
         return response;
     }
@@ -580,9 +537,4 @@ public sealed class MemoryCoordinator(
         return (topProjectId, Math.Min(1, topScore / 3.0), "alias_or_keyword_match");
     }
 
-    private static string ComputeHash(string value)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return Convert.ToHexString(hash);
-    }
 }

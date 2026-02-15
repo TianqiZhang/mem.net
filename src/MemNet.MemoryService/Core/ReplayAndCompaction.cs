@@ -24,7 +24,7 @@ public sealed class ReplayService(MemoryCoordinator coordinator)
                 SnapshotUri: replay.SnapshotUri),
             Confidence: replay.Confidence);
 
-        return coordinator.PatchDocumentAsync(key, patchRequest, replay.BaseETag, replay.IdempotencyKey, actor, cancellationToken);
+        return coordinator.PatchDocumentAsync(key, patchRequest, replay.BaseETag, actor, cancellationToken);
     }
 }
 
