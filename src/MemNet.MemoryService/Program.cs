@@ -30,6 +30,9 @@ if (provider == "filesystem")
 }
 else if (provider == "azure")
 {
+    var azureOptions = AzureProviderOptions.FromConfiguration(builder.Configuration);
+    builder.Services.AddSingleton(azureOptions);
+    builder.Services.AddSingleton<AzureClients>();
     builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
     builder.Services.AddSingleton<IEventStore, AzureBlobEventStore>();
     builder.Services.AddSingleton<IAuditStore, AzureBlobAuditStore>();

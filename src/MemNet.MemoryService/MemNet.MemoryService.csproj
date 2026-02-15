@@ -5,6 +5,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseAppHost>false</UseAppHost>
+    <MemNetEnableAzureSdk>false</MemNetEnableAzureSdk>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MemNetEnableAzureSdk)' == 'true'">
+    <DefineConstants>$(DefineConstants);MEMNET_ENABLE_AZURE_SDK</DefineConstants>
+    <OutputPath>bin/$(Configuration)/azure/</OutputPath>
+    <IntermediateOutputPath>obj/$(Configuration)/azure/</IntermediateOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MemNetEnableAzureSdk)' == 'true'">
+    <PackageReference Include="Azure.Identity" Version="1.17.1" />
+    <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0" />
+  </ItemGroup>
 
 </Project>

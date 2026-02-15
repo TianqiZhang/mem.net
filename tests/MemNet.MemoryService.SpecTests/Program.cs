@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using MemNet.MemoryService.Core;
 using MemNet.MemoryService.Infrastructure;
+using Microsoft.Extensions.Logging.Abstractions;
 
 var runner = new SpecRunner();
 await runner.RunAsync();
@@ -24,7 +25,8 @@ internal sealed class SpecRunner
             PatchDocumentReturns422OnLowConfidenceDurableFactsAsync,
             AssembleContextRoutesProjectAndRespectsBudgetsAsync,
             EventSearchReturnsRelevantResultsAsync,
-            HttpEndpointsWorkEndToEndAsync
+            HttpEndpointsWorkEndToEndAsync,
+            AzureProviderDisabledReturns501Async
         ];
     }
 
@@ -400,6 +402,30 @@ internal sealed class SpecRunner
         var results = searchBody["results"] as JsonArray ?? throw new Exception("Expected results array.");
         Assert.True(results.Count >= 1, "Expected at least one event search result.");
     }
+
+    private static async Task AzureProviderDisabledReturns501Async()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(
+            scope.RepoRoot,
+            scope.DataRoot,
+            scope.ConfigRoot,
+            provider: "azure");
+
+        using var client = new HttpClient
+        {
+            BaseAddress = host.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+
+        var response = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
+
+        var payload = JsonNode.Parse(await response.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected error payload.");
+        var errorCode = payload["error"]?["code"]?.GetValue<string>();
+        Assert.Equal("AZURE_PROVIDER_NOT_ENABLED", errorCode);
+    }
 }
 
 internal static class Assert
@@ -498,7 +524,14 @@ internal sealed class TestScope : IDisposable
         var auditStore = new FileAuditStore(options);
         var registry = new FileRegistryProvider(options);
         var idempotency = new InMemoryIdempotencyStore();
-        var coordinator = new MemoryCoordinator(documentStore, eventStore, auditStore, registry, registry, idempotency);
+        var coordinator = new MemoryCoordinator(
+            documentStore,
+            eventStore,
+            auditStore,
+            registry,
+            registry,
+            idempotency,
+            NullLogger<MemoryCoordinator>.Instance);
 
         var keys = new TestKeys("tenant-1", "user-1");
         SeedDocuments(documentStore, keys).GetAwaiter().GetResult();
@@ -599,7 +632,12 @@ internal sealed class ServiceHost : IDisposable
 
     public Uri BaseAddress { get; }
 
-    public static async Task<ServiceHost> StartAsync(string repoRoot, string dataRoot, string configRoot)
+    public static async Task<ServiceHost> StartAsync(
+        string repoRoot,
+        string dataRoot,
+        string configRoot,
+        string provider = "filesystem",
+        IReadOnlyDictionary<string, string?>? additionalEnvironment = null)
     {
         var port = ReserveFreePort();
         var baseAddress = new Uri($"http://127.0.0.1:{port}");
@@ -624,6 +662,15 @@ internal sealed class ServiceHost : IDisposable
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         startInfo.Environment["MEMNET_DATA_ROOT"] = dataRoot;
         startInfo.Environment["MEMNET_CONFIG_ROOT"] = configRoot;
+        startInfo.Environment["MEMNET_PROVIDER"] = provider;
+
+        if (additionalEnvironment is not null)
+        {
+            foreach (var pair in additionalEnvironment)
+            {
+                startInfo.Environment[pair.Key] = pair.Value;
+            }
+        }
 
         var process = new Process { StartInfo = startInfo };
         process.Start();

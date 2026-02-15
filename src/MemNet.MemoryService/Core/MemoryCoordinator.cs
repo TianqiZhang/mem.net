@@ -13,18 +13,24 @@ public sealed class MemoryCoordinator(
     IAuditStore auditStore,
     IProfileRegistryProvider profileRegistry,
     ISchemaRegistryProvider schemaRegistry,
-    IIdempotencyStore idempotencyStore)
+    IIdempotencyStore idempotencyStore,
+    ILogger<MemoryCoordinator> logger)
 {
     private const int MaxOpsPerPatch = 100;
+    private static readonly IDisposable NoopScope = new ScopeHandle();
 
     public async Task<DocumentRecord> GetDocumentAsync(DocumentKey key, CancellationToken cancellationToken = default)
     {
+        using var scope = BeginScope("document_get", key.TenantId, key.UserId, key.Namespace, key.Path);
+        logger.LogInformation("Reading document.");
+
         var result = await documentStore.GetAsync(key, cancellationToken);
         if (result is null)
         {
             throw new ApiException(StatusCodes.Status404NotFound, "DOCUMENT_NOT_FOUND", "Requested document was not found.");
         }
 
+        logger.LogInformation("Document read completed.");
         return result;
     }
 
@@ -36,6 +42,9 @@ public sealed class MemoryCoordinator(
         string actor,
         CancellationToken cancellationToken = default)
     {
+        using var scope = BeginScope("document_patch", key.TenantId, key.UserId, key.Namespace, key.Path);
+        logger.LogInformation("Patching document.");
+
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
         Guard.True(!string.IsNullOrWhiteSpace(idempotencyKey), "MISSING_IDEMPOTENCY_KEY", "Idempotency-Key header is required.", StatusCodes.Status400BadRequest);
         Guard.True(request.Ops.Count > 0, "INVALID_PATCH", "Patch operations are required.", StatusCodes.Status400BadRequest);
@@ -107,6 +116,7 @@ public sealed class MemoryCoordinator(
             EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
 
         idempotencyStore.Complete(idempotencyKey, payloadHash, response);
+        logger.LogInformation("Patch completed.");
         return response;
     }
 
@@ -118,6 +128,9 @@ public sealed class MemoryCoordinator(
         string actor,
         CancellationToken cancellationToken = default)
     {
+        using var scope = BeginScope("document_replace", key.TenantId, key.UserId, key.Namespace, key.Path);
+        logger.LogInformation("Replacing document.");
+
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
         Guard.True(!string.IsNullOrWhiteSpace(idempotencyKey), "MISSING_IDEMPOTENCY_KEY", "Idempotency-Key header is required.", StatusCodes.Status400BadRequest);
 
@@ -173,6 +186,7 @@ public sealed class MemoryCoordinator(
             EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
 
         idempotencyStore.Complete(idempotencyKey, payloadHash, response);
+        logger.LogInformation("Replace completed.");
         return response;
     }
 
@@ -182,6 +196,9 @@ public sealed class MemoryCoordinator(
         AssembleContextRequest request,
         CancellationToken cancellationToken = default)
     {
+        using var scope = BeginScope("context_assemble", tenantId, userId, profileId: request.ProfileId);
+        logger.LogInformation("Assembling context.");
+
         var profile = profileRegistry.GetProfile(request.ProfileId);
         var sortedBindings = profile.DocumentBindings.OrderBy(x => x.ReadPriority).ToList();
 
@@ -249,6 +266,9 @@ public sealed class MemoryCoordinator(
 
     public Task WriteEventAsync(EventDigest digest, CancellationToken cancellationToken = default)
     {
+        using var scope = BeginScope("event_write", digest.TenantId, digest.UserId, eventId: digest.EventId);
+        logger.LogInformation("Writing event digest.");
+
         Guard.True(!string.IsNullOrWhiteSpace(digest.EventId), "INVALID_EVENT", "event_id is required.", StatusCodes.Status400BadRequest);
         Guard.True(!string.IsNullOrWhiteSpace(digest.Digest), "INVALID_EVENT", "digest is required.", StatusCodes.Status400BadRequest);
         return eventStore.WriteAsync(digest, cancellationToken);
@@ -256,6 +276,9 @@ public sealed class MemoryCoordinator(
 
     public async Task<SearchEventsResponse> SearchEventsAsync(string tenantId, string userId, SearchEventsRequest request, CancellationToken cancellationToken = default)
     {
+        using var scope = BeginScope("event_search", tenantId, userId);
+        logger.LogInformation("Searching event digests.");
+
         var results = await eventStore.QueryAsync(
             tenantId,
             userId,
@@ -270,6 +293,34 @@ public sealed class MemoryCoordinator(
             cancellationToken);
 
         return new SearchEventsResponse(results);
+    }
+
+    private IDisposable BeginScope(
+        string operation,
+        string tenantId,
+        string userId,
+        string? @namespace = null,
+        string? path = null,
+        string? profileId = null,
+        string? eventId = null)
+    {
+        return logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["operation"] = operation,
+            ["tenant_id"] = tenantId,
+            ["user_id"] = userId,
+            ["namespace"] = @namespace,
+            ["path"] = path,
+            ["profile_id"] = profileId,
+            ["event_id"] = eventId
+        }) ?? NoopScope;
+    }
+
+    private sealed class ScopeHandle : IDisposable
+    {
+        public void Dispose()
+        {
+        }
     }
 
     private void ValidateEnvelope(DocumentBinding binding, DocumentEnvelope envelope)
