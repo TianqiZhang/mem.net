@@ -27,6 +27,7 @@ if (provider == "filesystem")
     builder.Services.AddSingleton<IDocumentStore, FileDocumentStore>();
     builder.Services.AddSingleton<IEventStore, FileEventStore>();
     builder.Services.AddSingleton<IAuditStore, FileAuditStore>();
+    builder.Services.AddSingleton<IUserDataMaintenanceStore, FileUserDataMaintenanceStore>();
 }
 else if (provider == "azure")
 {
@@ -36,6 +37,7 @@ else if (provider == "azure")
     builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
     builder.Services.AddSingleton<IEventStore, AzureBlobEventStore>();
     builder.Services.AddSingleton<IAuditStore, AzureBlobAuditStore>();
+    builder.Services.AddSingleton<IUserDataMaintenanceStore, AzureBlobUserDataMaintenanceStore>();
 }
 else
 {
@@ -48,6 +50,7 @@ builder.Services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 builder.Services.AddSingleton<MemoryCoordinator>();
 builder.Services.AddSingleton<ReplayService>();
 builder.Services.AddSingleton<CompactionService>();
+builder.Services.AddSingleton<DataLifecycleService>();
 
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
@@ -193,6 +196,27 @@ app.MapPost("/v1/tenants/{tenantId}/users/{userId}/events:search", async (
     CancellationToken cancellationToken) =>
 {
     var result = await coordinator.SearchEventsAsync(tenantId, userId, request, cancellationToken);
+    return Results.Ok(result);
+});
+
+app.MapDelete("/v1/tenants/{tenantId}/users/{userId}/memory", async (
+    [FromRoute] string tenantId,
+    [FromRoute] string userId,
+    DataLifecycleService lifecycleService,
+    CancellationToken cancellationToken) =>
+{
+    var result = await lifecycleService.ForgetUserAsync(tenantId, userId, cancellationToken);
+    return Results.Ok(result);
+});
+
+app.MapPost("/v1/tenants/{tenantId}/users/{userId}/retention:apply", async (
+    [FromRoute] string tenantId,
+    [FromRoute] string userId,
+    [FromBody] ApplyRetentionRequest request,
+    DataLifecycleService lifecycleService,
+    CancellationToken cancellationToken) =>
+{
+    var result = await lifecycleService.ApplyRetentionAsync(tenantId, userId, request.ProfileId, request.AsOfUtc, cancellationToken);
     return Results.Ok(result);
 });
 

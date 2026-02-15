@@ -31,6 +31,18 @@ public interface IAuditStore
     Task WriteAsync(AuditRecord record, CancellationToken cancellationToken = default);
 }
 
+public interface IUserDataMaintenanceStore
+{
+    Task<ForgetUserResult> ForgetUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default);
+
+    Task<RetentionSweepResult> ApplyRetentionAsync(
+        string tenantId,
+        string userId,
+        RetentionRules rules,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IProfileRegistryProvider
 {
     ProfileConfig GetProfile(string profileId);

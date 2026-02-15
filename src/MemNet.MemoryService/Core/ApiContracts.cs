@@ -62,4 +62,8 @@ public sealed record SearchEventsResponse(IReadOnlyList<EventDigest> Results);
 
 public sealed record WriteEventRequest(EventDigest Event);
 
+public sealed record ApplyRetentionRequest(
+    string ProfileId,
+    DateTimeOffset? AsOfUtc);
+
 public sealed record ErrorEnvelope(ApiError Error);

@@ -100,6 +100,22 @@ public enum IdempotencyState
 
 public sealed record MutationResponse(string ETag, DocumentEnvelope Document, bool IdempotencyReplay = false);
 
+public sealed record ForgetUserResult(
+    int DocumentsDeleted,
+    int EventsDeleted,
+    int AuditDeleted,
+    int SnapshotsDeleted,
+    int SearchDocumentsDeleted);
+
+public sealed record RetentionSweepResult(
+    int EventsDeleted,
+    int AuditDeleted,
+    int SnapshotsDeleted,
+    int SearchDocumentsDeleted,
+    DateTimeOffset CutoffEventsUtc,
+    DateTimeOffset CutoffAuditUtc,
+    DateTimeOffset CutoffSnapshotsUtc);
+
 public sealed record ApiError(
     string Code,
     string Message,

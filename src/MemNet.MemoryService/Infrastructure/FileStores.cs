@@ -285,6 +285,167 @@ public sealed class FileAuditStore(StorageOptions options) : IAuditStore
     }
 }
 
+public sealed class FileUserDataMaintenanceStore(StorageOptions options) : IUserDataMaintenanceStore
+{
+    public Task<ForgetUserResult> ForgetUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var userRoot = ResolveUserRoot(options.DataRoot, tenantId, userId);
+        if (!Directory.Exists(userRoot))
+        {
+            return Task.FromResult(new ForgetUserResult(0, 0, 0, 0, 0));
+        }
+
+        var documentsDeleted = CountFiles(Path.Combine(userRoot, "documents"), "*.json");
+        var eventsDeleted = CountFiles(Path.Combine(userRoot, "events"), "*.json");
+        var auditDeleted = CountFiles(Path.Combine(userRoot, "audit"), "*.json");
+        var snapshotsDeleted = CountFiles(Path.Combine(userRoot, "snapshots"), "*");
+
+        Directory.Delete(userRoot, recursive: true);
+        return Task.FromResult(new ForgetUserResult(documentsDeleted, eventsDeleted, auditDeleted, snapshotsDeleted, 0));
+    }
+
+    public async Task<RetentionSweepResult> ApplyRetentionAsync(
+        string tenantId,
+        string userId,
+        RetentionRules rules,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var userRoot = ResolveUserRoot(options.DataRoot, tenantId, userId);
+        if (!Directory.Exists(userRoot))
+        {
+            return new RetentionSweepResult(
+                EventsDeleted: 0,
+                AuditDeleted: 0,
+                SnapshotsDeleted: 0,
+                SearchDocumentsDeleted: 0,
+                CutoffEventsUtc: asOfUtc.AddDays(-rules.EventsDays),
+                CutoffAuditUtc: asOfUtc.AddDays(-rules.AuditDays),
+                CutoffSnapshotsUtc: asOfUtc.AddDays(-rules.SnapshotsDays));
+        }
+
+        var eventCutoff = asOfUtc.AddDays(-rules.EventsDays);
+        var auditCutoff = asOfUtc.AddDays(-rules.AuditDays);
+        var snapshotsCutoff = asOfUtc.AddDays(-rules.SnapshotsDays);
+
+        var eventsDeleted = await DeleteJsonFilesOlderThanAsync<EventDigest>(
+            Path.Combine(userRoot, "events"),
+            d => d.Timestamp,
+            eventCutoff,
+            cancellationToken);
+
+        var auditDeleted = await DeleteJsonFilesOlderThanAsync<AuditRecord>(
+            Path.Combine(userRoot, "audit"),
+            a => a.Timestamp,
+            auditCutoff,
+            cancellationToken);
+
+        var snapshotsDeleted = DeleteFilesByLastWriteTime(Path.Combine(userRoot, "snapshots"), snapshotsCutoff, cancellationToken);
+
+        return new RetentionSweepResult(
+            EventsDeleted: eventsDeleted,
+            AuditDeleted: auditDeleted,
+            SnapshotsDeleted: snapshotsDeleted,
+            SearchDocumentsDeleted: 0,
+            CutoffEventsUtc: eventCutoff,
+            CutoffAuditUtc: auditCutoff,
+            CutoffSnapshotsUtc: snapshotsCutoff);
+    }
+
+    private static async Task<int> DeleteJsonFilesOlderThanAsync<TRecord>(
+        string directory,
+        Func<TRecord, DateTimeOffset> getTimestamp,
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        var deleted = 0;
+        foreach (var file in Directory.EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TRecord? record;
+            try
+            {
+                var json = await File.ReadAllTextAsync(file, cancellationToken);
+                record = JsonSerializer.Deserialize<TRecord>(json, JsonDefaults.Options);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (record is null)
+            {
+                continue;
+            }
+
+            if (getTimestamp(record) >= cutoff)
+            {
+                continue;
+            }
+
+            File.Delete(file);
+            deleted++;
+        }
+
+        return deleted;
+    }
+
+    private static int DeleteFilesByLastWriteTime(string directory, DateTimeOffset cutoff, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        var deleted = 0;
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var lastWrite = File.GetLastWriteTimeUtc(file);
+            if (lastWrite >= cutoff.UtcDateTime)
+            {
+                continue;
+            }
+
+            File.Delete(file);
+            deleted++;
+        }
+
+        return deleted;
+    }
+
+    private static int CountFiles(string directory, string searchPattern)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        return Directory.EnumerateFiles(directory, searchPattern, SearchOption.AllDirectories).Count();
+    }
+
+    private static string ResolveUserRoot(string dataRoot, string tenantId, string userId)
+    {
+        return Path.Combine(dataRoot, "tenants", SanitizeSegment(tenantId), "users", SanitizeSegment(userId));
+    }
+
+    private static string SanitizeSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Contains(Path.DirectorySeparatorChar) || value.Contains(Path.AltDirectorySeparatorChar))
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_PATH_SEGMENT", "Path segment is invalid.");
+        }
+
+        return value;
+    }
+}
+
 public sealed class FileRegistryProvider : IProfileRegistryProvider, ISchemaRegistryProvider
 {
     private readonly Dictionary<string, ProfileConfig> _profiles;

@@ -26,7 +26,9 @@ internal sealed class SpecRunner
             AssembleContextRoutesProjectAndRespectsBudgetsAsync,
             EventSearchReturnsRelevantResultsAsync,
             HttpEndpointsWorkEndToEndAsync,
-            AzureProviderDisabledReturns501Async
+            AzureProviderDisabledReturns501Async,
+            RetentionSweepRemovesExpiredEventsAsync,
+            ForgetUserRemovesDocumentsAndEventsAsync
         ];
     }
 
@@ -425,6 +427,163 @@ internal sealed class SpecRunner
             ?? throw new Exception("Expected error payload.");
         var errorCode = payload["error"]?["code"]?.GetValue<string>();
         Assert.Equal("AZURE_PROVIDER_NOT_ENABLED", errorCode);
+    }
+
+    private static async Task RetentionSweepRemovesExpiredEventsAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = host.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+
+        var oldTimestamp = DateTimeOffset.UtcNow.AddDays(-420);
+        var freshTimestamp = DateTimeOffset.UtcNow.AddDays(-1);
+        var oldEventResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events",
+            new
+            {
+                @event = new
+                {
+                    event_id = "evt-retention-old",
+                    tenant_id = scope.Keys.Tenant,
+                    user_id = scope.Keys.User,
+                    service_id = "retention-tests",
+                    timestamp = oldTimestamp,
+                    source_type = "chat",
+                    digest = "Old event",
+                    keywords = new[] { "old" },
+                    project_ids = new[] { "project-alpha" },
+                    snapshot_uri = "blob://snapshots/old",
+                    evidence = new { message_ids = new[] { "m-old" }, start = 1, end = 1 }
+                }
+            });
+        Assert.Equal(HttpStatusCode.Accepted, oldEventResponse.StatusCode);
+
+        var freshEventResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events",
+            new
+            {
+                @event = new
+                {
+                    event_id = "evt-retention-fresh",
+                    tenant_id = scope.Keys.Tenant,
+                    user_id = scope.Keys.User,
+                    service_id = "retention-tests",
+                    timestamp = freshTimestamp,
+                    source_type = "chat",
+                    digest = "Fresh event",
+                    keywords = new[] { "fresh" },
+                    project_ids = new[] { "project-alpha" },
+                    snapshot_uri = "blob://snapshots/fresh",
+                    evidence = new { message_ids = new[] { "m-fresh" }, start = 1, end = 1 }
+                }
+            });
+        Assert.Equal(HttpStatusCode.Accepted, freshEventResponse.StatusCode);
+
+        var retentionResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
+            new { profile_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
+        Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
+
+        var retentionBody = JsonNode.Parse(await retentionResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected retention response.");
+        Assert.True((retentionBody["events_deleted"]?.GetValue<int>() ?? 0) >= 1, "Expected at least one old event to be deleted.");
+
+        var searchResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events:search",
+            new { query = (string?)null, top_k = 20 });
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+        var searchBody = JsonNode.Parse(await searchResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected event search response.");
+        var results = searchBody["results"] as JsonArray ?? throw new Exception("Expected results array.");
+        var eventIds = results
+            .Select(r => r?["event_id"]?.GetValue<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.True(!eventIds.Contains("evt-retention-old"), "Expired event should have been removed.");
+        Assert.True(eventIds.Contains("evt-retention-fresh"), "Fresh event should remain after retention sweep.");
+    }
+
+    private static async Task ForgetUserRemovesDocumentsAndEventsAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = host.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+
+        var getResponse = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var getPayload = JsonNode.Parse(await getResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected seeded document.");
+        var etag = getPayload["etag"]?.GetValue<string>() ?? throw new Exception("Expected seeded ETag.");
+
+        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json")
+        {
+            Content = JsonContent.Create(new
+            {
+                profile_id = "project-copilot-v1",
+                binding_id = "user_dynamic",
+                ops = new[] { new { op = "replace", path = "/content/preferences/0", value = "forget flow test" } },
+                reason = "live_update",
+                confidence = 0.9
+            })
+        };
+        patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
+        patchRequest.Headers.TryAddWithoutValidation("Idempotency-Key", "forget-flow-idem");
+        patchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "spec-tests");
+        var patchResponse = await client.SendAsync(patchRequest);
+        Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
+
+        var eventResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events",
+            new
+            {
+                @event = new
+                {
+                    event_id = "evt-forget-1",
+                    tenant_id = scope.Keys.Tenant,
+                    user_id = scope.Keys.User,
+                    service_id = "forget-tests",
+                    timestamp = DateTimeOffset.UtcNow,
+                    source_type = "chat",
+                    digest = "Forget flow event",
+                    keywords = new[] { "forget" },
+                    project_ids = new[] { "project-alpha" },
+                    snapshot_uri = "blob://snapshots/forget",
+                    evidence = new { message_ids = new[] { "m-forget" }, start = 1, end = 1 }
+                }
+            });
+        Assert.Equal(HttpStatusCode.Accepted, eventResponse.StatusCode);
+
+        var forgetResponse = await client.DeleteAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/memory");
+        Assert.Equal(HttpStatusCode.OK, forgetResponse.StatusCode);
+
+        var forgetBody = JsonNode.Parse(await forgetResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected forget response.");
+        Assert.True((forgetBody["documents_deleted"]?.GetValue<int>() ?? 0) >= 1, "Expected documents to be deleted.");
+        Assert.True((forgetBody["events_deleted"]?.GetValue<int>() ?? 0) >= 1, "Expected events to be deleted.");
+        Assert.True((forgetBody["audit_deleted"]?.GetValue<int>() ?? 0) >= 1, "Expected audit records to be deleted.");
+
+        var getAfterForget = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/user_dynamic.json");
+        Assert.Equal(HttpStatusCode.NotFound, getAfterForget.StatusCode);
+
+        var searchAfterForget = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events:search",
+            new { query = (string?)null, top_k = 20 });
+        Assert.Equal(HttpStatusCode.OK, searchAfterForget.StatusCode);
+        var searchBody = JsonNode.Parse(await searchAfterForget.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected search response.");
+        var results = searchBody["results"] as JsonArray ?? throw new Exception("Expected results array.");
+        Assert.True(results.Count == 0, "Expected no events after forget-user delete.");
     }
 }
 

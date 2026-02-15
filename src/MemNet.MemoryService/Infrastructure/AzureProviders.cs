@@ -534,6 +534,275 @@ public sealed class AzureBlobAuditStore(AzureClients clients) : IAuditStore
     }
 }
 
+public sealed class AzureBlobUserDataMaintenanceStore(AzureClients clients) : IUserDataMaintenanceStore
+{
+    public async Task<ForgetUserResult> ForgetUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default)
+    {
+        var documentsDeleted = await DeleteBlobsByPrefixAsync(
+            clients.DocumentsContainer,
+            AzurePathBuilder.DocumentsPrefix(tenantId, userId),
+            cancellationToken);
+
+        var eventsDeleted = await DeleteBlobsByPrefixAsync(
+            clients.EventsContainer,
+            AzurePathBuilder.EventsPrefix(tenantId, userId),
+            cancellationToken);
+
+        var auditDeleted = await DeleteBlobsByPrefixAsync(
+            clients.AuditContainer,
+            AzurePathBuilder.AuditPrefix(tenantId, userId),
+            cancellationToken);
+
+        var searchDocumentsDeleted = await DeleteSearchDocumentsByFilterAsync(
+            BuildSearchScopeFilter(tenantId, userId),
+            cancellationToken);
+
+        return new ForgetUserResult(
+            DocumentsDeleted: documentsDeleted,
+            EventsDeleted: eventsDeleted,
+            AuditDeleted: auditDeleted,
+            SnapshotsDeleted: 0,
+            SearchDocumentsDeleted: searchDocumentsDeleted);
+    }
+
+    public async Task<RetentionSweepResult> ApplyRetentionAsync(
+        string tenantId,
+        string userId,
+        RetentionRules rules,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var cutoffEvents = asOfUtc.AddDays(-rules.EventsDays);
+        var cutoffAudit = asOfUtc.AddDays(-rules.AuditDays);
+        var cutoffSnapshots = asOfUtc.AddDays(-rules.SnapshotsDays);
+
+        var eventsDeleted = await DeleteEventsOlderThanAsync(tenantId, userId, cutoffEvents, cancellationToken);
+        var auditDeleted = await DeleteAuditOlderThanAsync(tenantId, userId, cutoffAudit, cancellationToken);
+
+        var searchDocumentsDeleted = await DeleteSearchDocumentsByFilterAsync(
+            $"{BuildSearchScopeFilter(tenantId, userId)} and timestamp lt {cutoffEvents.UtcDateTime:O}",
+            cancellationToken);
+
+        return new RetentionSweepResult(
+            EventsDeleted: eventsDeleted,
+            AuditDeleted: auditDeleted,
+            SnapshotsDeleted: 0,
+            SearchDocumentsDeleted: searchDocumentsDeleted,
+            CutoffEventsUtc: cutoffEvents,
+            CutoffAuditUtc: cutoffAudit,
+            CutoffSnapshotsUtc: cutoffSnapshots);
+    }
+
+    private async Task<int> DeleteEventsOlderThanAsync(
+        string tenantId,
+        string userId,
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken)
+    {
+        var prefix = AzurePathBuilder.EventsPrefix(tenantId, userId);
+        var deleted = 0;
+        try
+        {
+            await foreach (var blob in clients.EventsContainer.GetBlobsAsync(prefix: prefix, cancellationToken: cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                EventDigest? digest;
+                try
+                {
+                    var download = await clients.EventsContainer.GetBlobClient(blob.Name).DownloadContentAsync(cancellationToken: cancellationToken);
+                    digest = JsonSerializer.Deserialize<EventDigest>(download.Value.Content, JsonDefaults.Options);
+                }
+                catch (RequestFailedException)
+                {
+                    continue;
+                }
+
+                if (digest is null || digest.Timestamp >= cutoff)
+                {
+                    continue;
+                }
+
+                var response = await clients.EventsContainer.DeleteBlobIfExistsAsync(
+                    blob.Name,
+                    DeleteSnapshotsOption.IncludeSnapshots,
+                    cancellationToken: cancellationToken);
+                if (response.Value)
+                {
+                    deleted++;
+                }
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        {
+            return 0;
+        }
+        catch (RequestFailedException ex)
+        {
+            throw AzureErrorMapper.ToApiException(ex, "AZURE_RETENTION_EVENTS_FAILED", "Failed to apply event retention in Azure Blob Storage.");
+        }
+
+        return deleted;
+    }
+
+    private async Task<int> DeleteAuditOlderThanAsync(
+        string tenantId,
+        string userId,
+        DateTimeOffset cutoff,
+        CancellationToken cancellationToken)
+    {
+        var prefix = AzurePathBuilder.AuditPrefix(tenantId, userId);
+        var deleted = 0;
+        try
+        {
+            await foreach (var blob in clients.AuditContainer.GetBlobsAsync(prefix: prefix, cancellationToken: cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                AuditRecord? record;
+                try
+                {
+                    var download = await clients.AuditContainer.GetBlobClient(blob.Name).DownloadContentAsync(cancellationToken: cancellationToken);
+                    record = JsonSerializer.Deserialize<AuditRecord>(download.Value.Content, JsonDefaults.Options);
+                }
+                catch (RequestFailedException)
+                {
+                    continue;
+                }
+
+                if (record is null || record.Timestamp >= cutoff)
+                {
+                    continue;
+                }
+
+                var response = await clients.AuditContainer.DeleteBlobIfExistsAsync(
+                    blob.Name,
+                    DeleteSnapshotsOption.IncludeSnapshots,
+                    cancellationToken: cancellationToken);
+                if (response.Value)
+                {
+                    deleted++;
+                }
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        {
+            return 0;
+        }
+        catch (RequestFailedException ex)
+        {
+            throw AzureErrorMapper.ToApiException(ex, "AZURE_RETENTION_AUDIT_FAILED", "Failed to apply audit retention in Azure Blob Storage.");
+        }
+
+        return deleted;
+    }
+
+    private async Task<int> DeleteBlobsByPrefixAsync(
+        Azure.Storage.Blobs.BlobContainerClient container,
+        string prefix,
+        CancellationToken cancellationToken)
+    {
+        var deleted = 0;
+        try
+        {
+            await foreach (var blob in container.GetBlobsAsync(prefix: prefix, cancellationToken: cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var response = await container.DeleteBlobIfExistsAsync(
+                    blob.Name,
+                    DeleteSnapshotsOption.IncludeSnapshots,
+                    cancellationToken: cancellationToken);
+                if (response.Value)
+                {
+                    deleted++;
+                }
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        {
+            return 0;
+        }
+        catch (RequestFailedException ex)
+        {
+            throw AzureErrorMapper.ToApiException(ex, "AZURE_FORGET_USER_FAILED", "Failed to delete user data from Azure Blob Storage.");
+        }
+
+        return deleted;
+    }
+
+    private async Task<int> DeleteSearchDocumentsByFilterAsync(string filter, CancellationToken cancellationToken)
+    {
+        if (clients.Search is null)
+        {
+            return 0;
+        }
+
+        var ids = new List<string>();
+        var deleted = 0;
+        try
+        {
+            var options = new Azure.Search.Documents.SearchOptions
+            {
+                Size = 1000,
+                Filter = filter
+            };
+            options.Select.Add("id");
+
+            var response = await clients.Search.SearchAsync<SearchDocument>("*", options, cancellationToken);
+            await foreach (var item in response.Value.GetResultsAsync().WithCancellation(cancellationToken))
+            {
+                if (ReadString(item.Document, "id") is { } id && !string.IsNullOrWhiteSpace(id))
+                {
+                    ids.Add(id);
+                }
+
+                if (ids.Count >= 500)
+                {
+                    deleted += await DeleteSearchBatchAsync(ids, cancellationToken);
+                }
+            }
+
+            if (ids.Count > 0)
+            {
+                deleted += await DeleteSearchBatchAsync(ids, cancellationToken);
+            }
+        }
+        catch (RequestFailedException ex)
+        {
+            throw AzureErrorMapper.ToApiException(ex, "AZURE_SEARCH_DELETE_FAILED", "Failed to delete Azure AI Search documents.");
+        }
+
+        return deleted;
+    }
+
+    private async Task<int> DeleteSearchBatchAsync(List<string> ids, CancellationToken cancellationToken)
+    {
+        var batch = IndexDocumentsBatch.Delete("id", ids);
+        var response = await clients.Search!.IndexDocumentsAsync(batch, cancellationToken: cancellationToken);
+        var deleted = response.Value.Results.Count(x => x.Succeeded);
+        ids.Clear();
+        return deleted;
+    }
+
+    private static string BuildSearchScopeFilter(string tenantId, string userId)
+    {
+        return $"tenant_id eq '{EscapeFilterValue(tenantId)}' and user_id eq '{EscapeFilterValue(userId)}'";
+    }
+
+    private static string EscapeFilterValue(string value)
+    {
+        return value.Replace("'", "''", StringComparison.Ordinal);
+    }
+
+    private static string? ReadString(SearchDocument doc, string key)
+    {
+        if (!doc.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value.ToString();
+    }
+}
+
 internal static class AzurePathBuilder
 {
     public static string DocumentPath(DocumentKey key)
@@ -556,9 +825,19 @@ internal static class AzurePathBuilder
         return $"tenants/{SanitizeSegment(tenantId)}/users/{SanitizeSegment(userId)}/events/";
     }
 
+    public static string DocumentsPrefix(string tenantId, string userId)
+    {
+        return $"tenants/{SanitizeSegment(tenantId)}/users/{SanitizeSegment(userId)}/documents/";
+    }
+
+    public static string AuditPrefix(string tenantId, string userId)
+    {
+        return $"tenants/{SanitizeSegment(tenantId)}/users/{SanitizeSegment(userId)}/audit/";
+    }
+
     public static string AuditPath(string tenantId, string userId, string changeId)
     {
-        return $"tenants/{SanitizeSegment(tenantId)}/users/{SanitizeSegment(userId)}/audit/{SanitizeSegment(changeId)}.json";
+        return $"{AuditPrefix(tenantId, userId)}{SanitizeSegment(changeId)}.json";
     }
 
     private static string SanitizeSegment(string value)
@@ -667,6 +946,40 @@ public sealed class AzureBlobAuditStore : IAuditStore
     public Task WriteAsync(AuditRecord record, CancellationToken cancellationToken = default)
     {
         _ = record;
+        _ = cancellationToken;
+        throw NotEnabled();
+    }
+}
+
+public sealed class AzureBlobUserDataMaintenanceStore : IUserDataMaintenanceStore
+{
+    private static ApiException NotEnabled()
+    {
+        return new ApiException(
+            StatusCodes.Status501NotImplemented,
+            "AZURE_PROVIDER_NOT_ENABLED",
+            "Azure provider build flag is disabled. Rebuild with /p:MemNetEnableAzureSdk=true to enable Azure SDK providers.");
+    }
+
+    public Task<ForgetUserResult> ForgetUserAsync(string tenantId, string userId, CancellationToken cancellationToken = default)
+    {
+        _ = tenantId;
+        _ = userId;
+        _ = cancellationToken;
+        throw NotEnabled();
+    }
+
+    public Task<RetentionSweepResult> ApplyRetentionAsync(
+        string tenantId,
+        string userId,
+        RetentionRules rules,
+        DateTimeOffset asOfUtc,
+        CancellationToken cancellationToken = default)
+    {
+        _ = tenantId;
+        _ = userId;
+        _ = rules;
+        _ = asOfUtc;
         _ = cancellationToken;
         throw NotEnabled();
     }

@@ -30,6 +30,8 @@
 - [x] `POST /context:assemble`
 - [x] `POST /events`
 - [x] `POST /events:search`
+- [x] `POST /retention:apply`
+- [x] `DELETE /memory` (forget-user)
 - [x] Canonical error model and request tracing
 
 ## Phase 4 - Replay and Compaction Foundations
@@ -43,6 +45,7 @@
 - [x] Add negative tests (`412`, `409`, `422`, `404`)
 - [x] Add context routing and budget tests
 - [x] Add event search tests
+- [x] Add retention and forget-user endpoint tests
 
 ## Phase 6 - Finalization
 - [x] Run full build/tests
@@ -78,4 +81,9 @@
 - [x] Add retries/timeouts for Azure SDK calls with bounded policies
 - [x] Add structured logs with tenant/user/path correlation fields
 - [x] Document Azure setup in `README.md` (auth, env vars, index bootstrap)
-- [ ] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps
+- [x] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps
+
+## Residual Gaps (Post-Review)
+- [ ] Add env-gated live Azure integration runs (requires tenant resources/credentials)
+- [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)
+- [ ] Add dedicated snapshot ingestion/store path beyond lifecycle cleanup hooks

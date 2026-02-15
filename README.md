@@ -91,6 +91,13 @@ When `MemNet:Azure:SearchEndpoint` and `MemNet:Azure:SearchIndexName` are set, e
 - `keywords`, `project_ids`, `evidence_message_ids` (string collections)
 - `evidence_start`, `evidence_end` (int)
 
+## Lifecycle APIs
+- `POST /v1/tenants/{tenantId}/users/{userId}/retention:apply`
+  - body: `{ "profile_id": "...", "as_of_utc": null }`
+  - applies profile retention windows to events/audit/snapshots and Azure Search derived docs
+- `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
+  - removes all documents/events/audit/snapshots for the user scope (and search docs when enabled)
+
 ## Notes
 - `MemNetEnableAzureSdk` defaults to `false` to keep offline/default builds deterministic.
 - Azure provider types are fully implemented, but require building with `/p:MemNetEnableAzureSdk=true`.
