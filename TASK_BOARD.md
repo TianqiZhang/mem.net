@@ -54,3 +54,27 @@
 - [x] Add runtime configuration overrides for data/config roots
 - [x] Add provider selection wiring (`filesystem` / `azure`)
 - [x] Add Azure provider scaffolding behind store interfaces
+
+## Phase 8 - Azure Provider Implementation
+- [-] Verify exact Azure SDK usage against Microsoft docs (Blob, AI Search, Identity)
+- [ ] Add Azure SDK package references and options model
+- [ ] Implement `AzureBlobDocumentStore` with optimistic concurrency (`ETag` / `If-Match`)
+- [ ] Implement `AzureBlobAuditStore` writes to tenant/user audit blobs
+- [ ] Implement `AzureBlobEventStore` blob persistence
+- [ ] Implement Azure AI Search indexing on event writes (upsert)
+- [ ] Implement Azure AI Search query path for `events:search`
+- [ ] Add graceful fallback/error mapping for transient Azure failures
+
+## Phase 9 - Azure Testing and Validation
+- [ ] Add unit tests for Azure provider mapping and request shaping
+- [ ] Add provider-agnostic contract tests for document/event/audit stores
+- [ ] Add optional live Azure integration test harness (env-gated)
+- [ ] Validate `filesystem` and `azure` providers against same acceptance scenarios
+- [ ] Run end-to-end manual API checks with `MEMNET_PROVIDER=azure`
+
+## Phase 10 - Production Readiness
+- [ ] Add startup config validation for required Azure settings
+- [ ] Add retries/timeouts for Azure SDK calls with bounded policies
+- [ ] Add structured logs with tenant/user/path correlation fields
+- [ ] Document Azure setup in `README.md` (auth, env vars, index bootstrap)
+- [ ] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps

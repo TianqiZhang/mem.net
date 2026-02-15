@@ -27,6 +27,11 @@ Build and maintain `mem.net` as a robust, configurable memory service that is ea
 - Keep `README.md` run instructions accurate.
 - Keep implementation aligned with `MEMORY_SERVICE_SPEC.md`; document intentional deviations.
 
+## Azure SDK Rule
+- For any specific Azure SDK/API usage (types, methods, options, auth flows), verify against the latest Microsoft docs before coding.
+- Do not rely on memory for exact Azure SDK details when implementation correctness depends on current official behavior.
+- If guidance is uncertain or outdated, pause implementation and re-check official Microsoft documentation first.
+
 ## Delivery Standard
 A task is done only when:
 1. Feature behavior is implemented.
