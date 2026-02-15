@@ -1,0 +1,25 @@
+{
+  "schemas": [
+    {
+      "schema_id": "memory.user.static",
+      "version": "1.0.0",
+      "required_content_paths": ["/profile"],
+      "max_content_chars": 8000,
+      "max_array_items": 200
+    },
+    {
+      "schema_id": "memory.user.dynamic",
+      "version": "1.0.0",
+      "required_content_paths": ["/preferences"],
+      "max_content_chars": 14000,
+      "max_array_items": 300
+    },
+    {
+      "schema_id": "memory.project",
+      "version": "1.0.0",
+      "required_content_paths": ["/summary"],
+      "max_content_chars": 28000,
+      "max_array_items": 400
+    }
+  ]
+}

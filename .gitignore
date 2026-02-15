@@ -1,0 +1,9 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# Local runtime data
+src/MemNet.MemoryService/data/
+
+# macOS
+.DS_Store
