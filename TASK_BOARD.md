@@ -72,7 +72,7 @@
 - [x] Add integration check that azure provider returns `501` when SDK build flag is disabled
 - [ ] Add unit tests for Azure provider mapping and request shaping
 - [ ] Add provider-agnostic contract tests for document/event/audit stores
-- [ ] Add optional live Azure integration test harness (env-gated)
+- [x] Add optional live Azure integration test harness (env-gated)
 - [ ] Validate `filesystem` and `azure` providers against same acceptance scenarios
 - [ ] Run end-to-end manual API checks with `MEMNET_PROVIDER=azure`
 
@@ -84,6 +84,6 @@
 - [x] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps
 
 ## Residual Gaps (Post-Review)
-- [ ] Add env-gated live Azure integration runs (requires tenant resources/credentials)
+- [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)
 - [ ] Add dedicated snapshot ingestion/store path beyond lifecycle cleanup hooks

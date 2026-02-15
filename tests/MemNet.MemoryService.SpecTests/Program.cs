@@ -28,7 +28,8 @@ internal sealed class SpecRunner
             HttpEndpointsWorkEndToEndAsync,
             AzureProviderDisabledReturns501Async,
             RetentionSweepRemovesExpiredEventsAsync,
-            ForgetUserRemovesDocumentsAndEventsAsync
+            ForgetUserRemovesDocumentsAndEventsAsync,
+            AzureLiveSmokeTestIfConfiguredAsync
         ];
     }
 
@@ -585,6 +586,73 @@ internal sealed class SpecRunner
         var results = searchBody["results"] as JsonArray ?? throw new Exception("Expected results array.");
         Assert.True(results.Count == 0, "Expected no events after forget-user delete.");
     }
+
+    private static async Task AzureLiveSmokeTestIfConfiguredAsync()
+    {
+        var runLive = Environment.GetEnvironmentVariable("MEMNET_RUN_AZURE_LIVE_TESTS");
+        if (!string.Equals(runLive, "1", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var requiredEnv = new[]
+        {
+            "MEMNET_AZURE_STORAGE_SERVICE_URI",
+            "MEMNET_AZURE_DOCUMENTS_CONTAINER",
+            "MEMNET_AZURE_EVENTS_CONTAINER",
+            "MEMNET_AZURE_AUDIT_CONTAINER"
+        };
+
+        var missing = requiredEnv
+            .Where(name => string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name)))
+            .ToList();
+        if (missing.Count > 0)
+        {
+            throw new Exception($"Azure live test requested, but required env vars are missing: {string.Join(", ", missing)}");
+        }
+
+        using var scope = TestScope.Create();
+        var liveDll = Path.Combine(scope.RepoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "azure", "net8.0", "MemNet.MemoryService.dll");
+        if (!File.Exists(liveDll))
+        {
+            throw new Exception($"Azure-enabled service DLL not found: {liveDll}");
+        }
+
+        var azureEnv = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["MEMNET_AZURE_STORAGE_SERVICE_URI"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_STORAGE_SERVICE_URI"),
+            ["MEMNET_AZURE_DOCUMENTS_CONTAINER"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_DOCUMENTS_CONTAINER"),
+            ["MEMNET_AZURE_EVENTS_CONTAINER"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_EVENTS_CONTAINER"),
+            ["MEMNET_AZURE_AUDIT_CONTAINER"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_AUDIT_CONTAINER"),
+            ["MEMNET_AZURE_SEARCH_ENDPOINT"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_SEARCH_ENDPOINT"),
+            ["MEMNET_AZURE_SEARCH_INDEX"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_SEARCH_INDEX"),
+            ["MEMNET_AZURE_SEARCH_API_KEY"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_SEARCH_API_KEY"),
+            ["MEMNET_AZURE_MANAGED_IDENTITY_CLIENT_ID"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_MANAGED_IDENTITY_CLIENT_ID"),
+            ["MEMNET_AZURE_USE_MANAGED_IDENTITY_ONLY"] = Environment.GetEnvironmentVariable("MEMNET_AZURE_USE_MANAGED_IDENTITY_ONLY")
+        };
+
+        using var host = await ServiceHost.StartAsync(
+            scope.RepoRoot,
+            scope.DataRoot,
+            scope.ConfigRoot,
+            provider: "azure",
+            additionalEnvironment: azureEnv,
+            serviceDllPath: liveDll);
+
+        using var client = new HttpClient
+        {
+            BaseAddress = host.BaseAddress,
+            Timeout = TimeSpan.FromSeconds(10)
+        };
+
+        var health = await client.GetAsync("/");
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+
+        var retentionResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
+            new { profile_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
+        Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
+    }
 }
 
 internal static class Assert
@@ -796,12 +864,14 @@ internal sealed class ServiceHost : IDisposable
         string dataRoot,
         string configRoot,
         string provider = "filesystem",
-        IReadOnlyDictionary<string, string?>? additionalEnvironment = null)
+        IReadOnlyDictionary<string, string?>? additionalEnvironment = null,
+        string? serviceDllPath = null)
     {
         var port = ReserveFreePort();
         var baseAddress = new Uri($"http://127.0.0.1:{port}");
         var baseAddressForHosting = $"http://127.0.0.1:{port}";
-        var serviceDll = Path.Combine(repoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "net8.0", "MemNet.MemoryService.dll");
+        var serviceDll = serviceDllPath
+            ?? Path.Combine(repoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "net8.0", "MemNet.MemoryService.dll");
         if (!File.Exists(serviceDll))
         {
             throw new Exception($"Service DLL not found for integration host: {serviceDll}");

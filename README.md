@@ -41,6 +41,17 @@ dotnet run --project src/MemNet.MemoryService
 dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
 ```
 
+Optional Azure live smoke test (env-gated):
+```bash
+dotnet build src/MemNet.MemoryService/MemNet.MemoryService.csproj -p:MemNetEnableAzureSdk=true
+MEMNET_RUN_AZURE_LIVE_TESTS=1 \
+MEMNET_AZURE_STORAGE_SERVICE_URI="https://<account>.blob.core.windows.net" \
+MEMNET_AZURE_DOCUMENTS_CONTAINER="memnet-documents" \
+MEMNET_AZURE_EVENTS_CONTAINER="memnet-events" \
+MEMNET_AZURE_AUDIT_CONTAINER="memnet-audit" \
+dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
+```
+
 4. Optional: override roots/provider at runtime
 ```bash
 MEMNET_DATA_ROOT=/tmp/memnet-data \
