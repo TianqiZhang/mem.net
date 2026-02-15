@@ -92,10 +92,15 @@
 - [x] Rename API request selector fields from `profile_id` to `policy_id`
 - [x] Remove project-specific routing semantics from `context:assemble`; keep assembly generic and fixed-path only
 - [x] Update spec tests to match simplified policy behavior
+- [x] Introduce `IMemoryBackend` abstraction and backend factory to simplify provider wiring
+
+## Phase 12 - Structure Alignment
+- [x] Reorganize source tree to match mental model (`Api`, `Application`, `Domain`, `Policy`, `Backends`)
+- [x] Move default policy file to `src/MemNet.MemoryService/Policy/policy.json`
+- [x] Update runtime default config root and test harness paths for policy location
 
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)
 - [ ] Reintroduce compaction as optional background job with dedicated config
 - [ ] Add dedicated snapshot ingestion/store path beyond lifecycle cleanup hooks
-- [ ] Introduce `IMemoryBackend` to encapsulate provider-specific document/event/audit/search/lifecycle wiring and simplify startup composition

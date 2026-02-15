@@ -18,7 +18,7 @@ Policy-driven memory service for multi-agent systems.
 ## Core Capabilities (v1)
 
 - Document read/patch/replace with ETag optimistic concurrency.
-- Context assembly with routing + budget controls.
+- Context assembly for deterministic base memory with budget controls.
 - Event digest write/search.
 - Retention and forget-user lifecycle operations.
 - Pluggable provider mode:
@@ -95,7 +95,7 @@ Expected response:
 
 ## Configuration
 
-Runtime behavior is driven by `src/MemNet.MemoryService/config/policy.json`.
+Runtime behavior is driven by `src/MemNet.MemoryService/Policy/policy.json`.
 
 ### Key environment variables
 
@@ -103,7 +103,7 @@ Runtime behavior is driven by `src/MemNet.MemoryService/config/policy.json`.
 |---|---|
 | `MEMNET_PROVIDER` | `filesystem` or `azure` |
 | `MEMNET_DATA_ROOT` | Local data root for filesystem provider |
-| `MEMNET_CONFIG_ROOT` | Policy/config root (contains `policy.json`) |
+| `MEMNET_CONFIG_ROOT` | Policy root directory (contains `policy.json`) |
 | `MEMNET_AZURE_STORAGE_SERVICE_URI` | Blob service URI for azure provider |
 | `MEMNET_AZURE_DOCUMENTS_CONTAINER` | Documents container |
 | `MEMNET_AZURE_EVENTS_CONTAINER` | Events container |
@@ -158,7 +158,11 @@ If `MEMNET_PROVIDER=azure` is used without Azure SDK build flag, endpoints retur
 ## Repository Map
 
 - `MEMORY_SERVICE_SPEC.md` - technical spec aligned with current implementation.
-- `src/MemNet.MemoryService` - API service and providers.
+- `src/MemNet.MemoryService/Api` - HTTP entrypoint and endpoint wiring.
+- `src/MemNet.MemoryService/Application` - orchestration services (`MemoryCoordinator`, lifecycle, replay).
+- `src/MemNet.MemoryService/Domain` - core models, errors, and patch engine.
+- `src/MemNet.MemoryService/Policy` - `PolicyRegistry` and default `policy.json`.
+- `src/MemNet.MemoryService/Backends` - store abstractions and provider implementations.
 - `tests/MemNet.MemoryService.SpecTests` - executable specification tests.
 - `TASK_BOARD.md` - implementation progress and backlog.
 - `AGENTS.md` - development guardrails and first-principles rules.
@@ -166,7 +170,6 @@ If `MEMNET_PROVIDER=azure` is used without Azure SDK build flag, endpoints retur
 ## Roadmap (Short)
 
 - Provider-agnostic contract tests.
-- `IMemoryBackend` composition simplification.
 - Background replay/reindex orchestration.
 - Optional compaction worker with dedicated config.
 

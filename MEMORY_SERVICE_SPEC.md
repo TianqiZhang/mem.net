@@ -55,7 +55,7 @@ Source of truth is document/event/audit blobs/files. Search index is derived.
 `/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`
 
 ## 6. Policy Model
-Runtime behavior is configured from `config/policy.json`.
+Runtime behavior is configured from `Policy/policy.json` (or from `MEMNET_CONFIG_ROOT` pointing to the policy directory).
 
 ### 6.1 Policy File Shape
 ```json
@@ -319,7 +319,7 @@ The following are intentionally deferred from v1 runtime core:
 ## 18. Acceptance Criteria (v1)
 1. Policy-driven binding resolution and validation are enforced.
 2. Live patch and replace operations require `If-Match` and enforce ETag semantics.
-3. Context assembly returns deterministic routing output with budget handling.
+3. Context assembly returns deterministic base documents with budget handling.
 4. Event write and search APIs are functional.
 5. Retention and forget-user lifecycle endpoints are functional.
 6. Audit trail is produced for mutating document operations.

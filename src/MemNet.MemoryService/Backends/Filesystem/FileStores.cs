@@ -7,22 +7,6 @@ using Microsoft.AspNetCore.Http;
 
 namespace MemNet.MemoryService.Infrastructure;
 
-public sealed class StorageOptions
-{
-    public required string DataRoot { get; init; }
-
-    public required string ConfigRoot { get; init; }
-}
-
-public static class JsonDefaults
-{
-    public static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = true
-    };
-}
-
 public sealed class FileDocumentStore(StorageOptions options) : IDocumentStore
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
@@ -443,29 +427,5 @@ public sealed class FileUserDataMaintenanceStore(StorageOptions options) : IUser
         }
 
         return value;
-    }
-}
-
-public sealed class PolicyRegistry
-{
-    private readonly Dictionary<string, PolicyDefinition> _policies;
-
-    public PolicyRegistry(StorageOptions options)
-    {
-        var policyPath = Path.Combine(options.ConfigRoot, "policy.json");
-        var policy = JsonSerializer.Deserialize<PolicyConfig>(File.ReadAllText(policyPath), JsonDefaults.Options)
-            ?? throw new InvalidOperationException("Failed to load policy configuration.");
-
-        _policies = policy.Policies.ToDictionary(x => x.PolicyId, x => x, StringComparer.Ordinal);
-    }
-
-    public PolicyDefinition GetPolicy(string policyId)
-    {
-        if (_policies.TryGetValue(policyId, out var policy))
-        {
-            return policy;
-        }
-
-        throw new ApiException(StatusCodes.Status404NotFound, "POLICY_NOT_FOUND", $"Policy '{policyId}' was not found.");
     }
 }

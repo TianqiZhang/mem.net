@@ -13,7 +13,7 @@ var configuredProvider = builder.Configuration["MemNet:Provider"] ?? Environment
 var options = new StorageOptions
 {
     DataRoot = string.IsNullOrWhiteSpace(configuredDataRoot) ? Path.Combine(appRoot, "data") : configuredDataRoot,
-    ConfigRoot = string.IsNullOrWhiteSpace(configuredConfigRoot) ? Path.Combine(appRoot, "config") : configuredConfigRoot
+    ConfigRoot = string.IsNullOrWhiteSpace(configuredConfigRoot) ? Path.Combine(appRoot, "Policy") : configuredConfigRoot
 };
 
 var provider = string.IsNullOrWhiteSpace(configuredProvider)
@@ -21,28 +21,9 @@ var provider = string.IsNullOrWhiteSpace(configuredProvider)
     : configuredProvider.Trim().ToLowerInvariant();
 
 builder.Services.AddSingleton(options);
-
-if (provider == "filesystem")
-{
-    builder.Services.AddSingleton<IDocumentStore, FileDocumentStore>();
-    builder.Services.AddSingleton<IEventStore, FileEventStore>();
-    builder.Services.AddSingleton<IAuditStore, FileAuditStore>();
-    builder.Services.AddSingleton<IUserDataMaintenanceStore, FileUserDataMaintenanceStore>();
-}
-else if (provider == "azure")
-{
-    var azureOptions = AzureProviderOptions.FromConfiguration(builder.Configuration);
-    builder.Services.AddSingleton(azureOptions);
-    builder.Services.AddSingleton<AzureClients>();
-    builder.Services.AddSingleton<IDocumentStore, AzureBlobDocumentStore>();
-    builder.Services.AddSingleton<IEventStore, AzureBlobEventStore>();
-    builder.Services.AddSingleton<IAuditStore, AzureBlobAuditStore>();
-    builder.Services.AddSingleton<IUserDataMaintenanceStore, AzureBlobUserDataMaintenanceStore>();
-}
-else
-{
-    throw new InvalidOperationException($"Unsupported provider '{provider}'.");
-}
+var backend = MemoryBackendFactory.Create(provider);
+builder.Services.AddSingleton<IMemoryBackend>(backend);
+backend.RegisterServices(builder.Services, builder.Configuration);
 
 builder.Services.AddSingleton<PolicyRegistry>();
 builder.Services.AddSingleton<MemoryCoordinator>();

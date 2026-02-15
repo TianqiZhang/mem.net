@@ -642,7 +642,7 @@ internal sealed class TestScope : IDisposable
     public static TestScope Create()
     {
         var repoRoot = Directory.GetCurrentDirectory();
-        var configRoot = Path.Combine(repoRoot, "src", "MemNet.MemoryService", "config");
+        var configRoot = Path.Combine(repoRoot, "src", "MemNet.MemoryService", "Policy");
         if (!Directory.Exists(configRoot))
         {
             throw new Exception($"Config directory not found: {configRoot}");
