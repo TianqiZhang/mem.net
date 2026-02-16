@@ -1,7 +1,7 @@
 # mem.net SDK Technical Specification
 
 Project: `mem.net` SDK  
-Status: Active pre-release implementation  
+Status: Active pre-release implementation; Phase 17 SDK refactor pending API simplification  
 Last Updated: February 16, 2026
 
 ## 1. Purpose
@@ -52,11 +52,11 @@ Optional future package:
 - `net8.0` minimum for first release.
 
 ## 6. Low-Level API (`MemNet.Client`)
-### 6.1 Core Types
+### 6.1 Core Types (Target After Phase 17C)
 - `MemNetClient`
 - `MemNetClientOptions`
 - `MemNetScope` (`tenantId`, `userId`)
-- `DocumentRef` (`namespace`, `path`)
+- `MemoryFileRef` (`path`)
 - `ApiErrorEnvelope` / `ApiError`
 
 ### 6.2 Client Options
@@ -69,13 +69,13 @@ Optional future package:
 - `HeaderProvider` callback for auth/gateway headers
 - diagnostics callbacks (`OnRequest`, `OnResponse`)
 
-### 6.3 Methods (Endpoint-Aligned)
+### 6.3 Methods (Endpoint-Aligned, Target After Phase 17C)
 All methods accept `CancellationToken`.
 
 - `GetServiceStatusAsync()` -> `GET /`
-- `GetDocumentAsync(MemNetScope scope, DocumentRef doc)` -> `GET /documents/{namespace}/{path}`
-- `PatchDocumentAsync(MemNetScope scope, DocumentRef doc, PatchDocumentRequest request, string ifMatch)` -> `PATCH /documents/{namespace}/{path}`
-- `ReplaceDocumentAsync(MemNetScope scope, DocumentRef doc, ReplaceDocumentRequest request, string ifMatch)` -> `PUT /documents/{namespace}/{path}`
+- `LoadFileAsync(MemNetScope scope, string path)` -> `GET /files/{**path}`
+- `PatchFileAsync(MemNetScope scope, string path, PatchFileRequest request, string ifMatch)` -> `PATCH /files/{**path}`
+- `WriteFileAsync(MemNetScope scope, string path, WriteFileRequest request, string ifMatch)` -> `PUT /files/{**path}`
 - `AssembleContextAsync(MemNetScope scope, AssembleContextRequest request)` -> `POST /context:assemble`
 - `WriteEventAsync(MemNetScope scope, WriteEventRequest request)` -> `POST /events` (`202 Accepted`)
 - `SearchEventsAsync(MemNetScope scope, SearchEventsRequest request)` -> `POST /events:search`
@@ -84,9 +84,9 @@ All methods accept `CancellationToken`.
 
 No low-level method requires `policy_id` or `binding_id`.
 
-Phase 17 target additions:
-- `GetFileAsync(...)` / `WriteFileAsync(...)` / `PatchFileAsync(...)` aligned to `/files/{**path}`
-- `/documents` methods are current baseline until file APIs land
+Phase 17 execution order:
+1. Phase 17B: service API moves from `/documents/{namespace}/{path}` to `/files/{**path}`.
+2. Phase 17C: SDK replaces document/namespace primitives with file/path primitives.
 
 ### 6.4 Response Shapes
 - document operations: `ETag` + `DocumentEnvelope`
@@ -202,6 +202,11 @@ Mutations:
 ### Phase D
 - docs/samples for practical agent use case
 
+## 14.1 Phase 17 Order (Current Work)
+1. API-first refactor: remove public namespace concept and make `/files/{**path}` canonical.
+2. SDK refactor: expose file-like primitives only for LLM-facing workflows.
+3. Test/doc consolidation after both code phases are complete.
+
 ## 15. Acceptance Criteria (SDK v1)
 1. Low-level client covers all v2 endpoints.
 2. No low-level API requires policy/binding concepts.
@@ -215,3 +220,6 @@ Current implementation includes:
 - `src/MemNet.Client` low-level endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
 - `src/MemNet.AgentMemory` high-level policy/slot facade.
 - executable SDK contract coverage in `tests/MemNet.MemoryService.SpecTests`.
+
+Known gap:
+- current SDK still exposes namespace-based document primitives; Phase 17C will remove them.

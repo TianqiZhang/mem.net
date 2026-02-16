@@ -143,25 +143,26 @@
 - [x] Decide native route shape (`/documents` with file payload vs dedicated `/files` routes) and document in specs
 - [x] Update `MEMORY_SERVICE_SPEC.md` and `SDK_SPEC.md` with authoritative file-first contracts and pre-release boundary
 
-### 17B - Service Native File Runtime
-- [ ] Introduce native file payload model (`content` text + `content_type`) while preserving ETag/audit semantics
-- [ ] Implement text patch engine for file content (all-or-nothing deterministic matching)
-- [x] Remove policy/binding runtime checks from service baseline
-- [ ] Keep events/search/lifecycle behavior unchanged under file-first mode
+### 17B - API Simplification First (Service)
+- [ ] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API
+- [ ] Remove public `namespace` concept from service contracts/domain models/audit records
+- [ ] Change `context:assemble` request/response from `documents[]` to path-only `files[]`
+- [ ] Implement deterministic text patch (`old_text`/`new_text`/`occurrence`) for file API
+- [ ] Keep events/search/lifecycle behavior unchanged
 
-### 17C - SDK Tooling Alignment
-- [ ] Add low-level file-centric APIs in `MemNet.Client` (load/patch/write file + recall)
+### 17C - SDK Refactor Second
+- [ ] Refactor `MemNet.Client` to path-only file primitives (`load/write/patch`)
+- [ ] Remove namespace-based document references from public SDK surface
 - [ ] Add high-level 4-tool facade in `MemNet.AgentMemory` matching LLM tool contract exactly
-- [ ] Ensure SDK hides policy/etag internals from LLM-facing harness interfaces
 - [ ] Keep optional slot/policy helper APIs app-facing while file tools are primary
 
-### 17D - Test Hardening and Migration Safety
+### 17D - Test Hardening and Validation
+- [ ] Update all existing service+SDK tests to new `/files` + path-only contracts
 - [ ] Add spec tests for text patch success/failure/ambiguous-match paths
 - [ ] Add ETag conflict + retry tests for file patch/write flows
-- [ ] Keep tests focused on single canonical contracts (no dual-shape compatibility paths)
 - [ ] Ensure filesystem and azure providers pass shared file-first acceptance scenarios (azure live run env-gated)
 
-### 17E - Documentation and Deletion Plan
+### 17E - Documentation and Cleanup
 - [ ] Add migration guide from slot/policy-oriented SDK usage to file-like memory tools
 - [x] Remove policy runtime module and compatibility-field references from service/docs
 - [ ] Update README examples to use markdown-first files and 4-tool contract only

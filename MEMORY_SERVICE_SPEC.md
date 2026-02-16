@@ -1,7 +1,7 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Active v2 baseline, file-first contract planned for Phase 17  
+Status: Active v2 baseline; Phase 17 API simplification in progress  
 Version: 2.0 (target)  
 Last Updated: February 16, 2026
 
@@ -47,7 +47,8 @@ Anything outside these capabilities belongs in SDK/application layers.
 Source of truth is documents/events/audits/snapshots in storage. Search index is derived state.
 
 ## 5. Storage Layout (Reference)
-`/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`  
+Target storage layout after Phase 17B:
+`/tenants/{tenant_id}/users/{user_id}/files/{path}`  
 `/tenants/{tenant_id}/users/{user_id}/events/{event_id}.json`  
 `/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`  
 `/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`
@@ -97,19 +98,23 @@ All endpoints are server-to-server and scoped by `(tenantId, userId)`.
 ### 7.1 Service Status
 `GET /`
 
-### 7.2 Get Document
-`GET /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
+### 7.2 Get File (Phase 17B Target)
+`GET /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Response:
 ```json
 {
   "etag": "\"...\"",
-  "document": { "...": "..." }
+  "file": {
+    "path": "user/profile.md",
+    "content_type": "text/markdown",
+    "content": "..."
+  }
 }
 ```
 
-### 7.3 Patch Document
-`PATCH /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
+### 7.3 Patch File (Phase 17B Target)
+`PATCH /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Headers:
 - `If-Match` required
@@ -118,10 +123,14 @@ Headers:
 Request body:
 ```json
 {
-  "ops": [
-    { "op": "replace", "path": "/content/preferences/0", "value": "Use concise answers." }
+  "edits": [
+    {
+      "old_text": "## Preferences\n- concise answers\n",
+      "new_text": "## Preferences\n- concise answers\n- include tradeoffs first\n",
+      "occurrence": 1
+    }
   ],
-  "reason": "live_update",
+  "reason": "preference_update",
   "evidence": {
     "conversation_id": "c_123",
     "message_ids": ["m1"],
@@ -130,8 +139,8 @@ Request body:
 }
 ```
 
-### 7.4 Replace Document
-`PUT /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
+### 7.4 Write File (Phase 17B Target)
+`PUT /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Headers:
 - `If-Match` required
@@ -140,7 +149,8 @@ Headers:
 Request body:
 ```json
 {
-  "document": { "...": "..." },
+  "content_type": "text/markdown",
+  "content": "## Preferences\n- concise answers\n",
   "reason": "manual_rewrite",
   "evidence": {
     "conversation_id": "c_123",
@@ -150,15 +160,15 @@ Request body:
 }
 ```
 
-### 7.5 Assemble Context (Explicit Refs)
+### 7.5 Assemble Context (Explicit File Refs, Phase 17B Target)
 `POST /v1/tenants/{tenantId}/users/{userId}/context:assemble`
 
 Request body:
 ```json
 {
-  "documents": [
-    { "namespace": "user", "path": "profile.json" },
-    { "namespace": "user", "path": "long_term_memory.json" }
+  "files": [
+    { "path": "user/profile.md" },
+    { "path": "user/long_term_memory.md" }
   ],
   "max_docs": 8,
   "max_chars_total": 40000
@@ -166,9 +176,9 @@ Request body:
 ```
 
 Response includes:
-- `documents[]` with resolved doc content + etag
-- `dropped_documents[]` when budgets prevent inclusion
-- missing docs are omitted (not an error)
+- `files[]` with resolved file content + etag
+- `dropped_files[]` when budgets prevent inclusion
+- missing files are omitted (not an error)
 
 ### 7.6 Write Event Digest
 `POST /v1/tenants/{tenantId}/users/{userId}/events`
@@ -203,66 +213,17 @@ Request body:
 ### 7.9 Forget User
 `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
 
-### 7.10 Native File API (Phase 17 Target)
-To align with agent file-like memory tools, the canonical native contract is a file API family:
+### 7.10 Breaking Change Scope (Phase 17B)
+Phase 17B removes the public `namespace` concept from file endpoints.
 
-- `GET /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
-- `PUT /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
-- `PATCH /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
-
-Route decision:
-- Native file-first semantics use `/files`.
-- Existing `/documents/{namespace}/{path}` remains current baseline API until `/files` is implemented.
-
-File read response shape:
-```json
-{
-  "etag": "\"...\"",
-  "file": {
-    "path": "/long_term_memory.md",
-    "content_type": "text/markdown",
-    "content": "## Preferences\n- concise answers\n"
-  }
-}
-```
-
-File write request shape:
-```json
-{
-  "content_type": "text/markdown",
-  "content": "## Preferences\n- concise answers\n",
-  "reason": "manual_update"
-}
-```
-
-File patch request shape (deterministic text patch):
-```json
-{
-  "edits": [
-    {
-      "old_text": "## Preferences\n- concise answers\n",
-      "new_text": "## Preferences\n- concise answers\n- include tradeoffs first\n",
-      "occurrence": 1
-    }
-  ],
-  "reason": "preference_update"
-}
-```
-
-Patch semantics:
-- all-or-nothing
-- exact match + optional occurrence selector
-- ambiguous or missing match returns `422`
-- `If-Match` required for write/patch
+- old route family: `/documents/{namespace}/{path}`
+- new route family: `/files/{**path}`
+- assembly input changes from `documents[]` to `files[]` (path-only)
+- service remains pre-release; no backward-compat layer is required
 
 ## 8. Validation Rules (Runtime)
-For document mutations, service enforces:
+For file mutations, service enforces:
 - `If-Match` optimistic concurrency.
-- max patch operation count (`100`).
-- request/body structural validity.
-- envelope payload sanity and bounded size limits (service-level guardrails).
-
-For native file patch (Phase 17 target), service will enforce:
 - deterministic text-edit matching (`old_text`, `new_text`, `occurrence`)
 - bounded edit count and bounded file payload size
 - explicit rejection for ambiguous/unmatched edits
@@ -280,10 +241,10 @@ ETag optimistic concurrency:
 Service does not provide multi-document transactions.
 
 ## 10. Context Assembly Behavior
-- Caller provides explicit document refs.
+- Caller provides explicit file refs.
 - Service reads refs in request order.
 - `max_docs` and `max_chars_total` budgets are enforced deterministically.
-- Returned docs include etag + document envelope.
+- Returned files include etag + content payload.
 - `events:search` remains a separate API call.
 
 ## 11. Retention and Deletion
@@ -351,8 +312,9 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 
 - breaking API and contract changes are allowed before first public stable release
 - service runtime remains policy-free (no `policy_id`/`binding_id` selectors)
+- service runtime removes public namespace selector from file APIs
 - policy/slot/schema guardrails belong to SDK/application layers
-- `/files` rollout can replace `/documents` semantics without legacy-shape support requirements
+- `/files` path-only contract is the canonical file API
 
 ## 17. Deferred Extensions
 - dedicated compaction worker and compaction-specific config
@@ -368,3 +330,4 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 
 ## 19. Implementation Status
 Current implementation satisfies v2 acceptance criteria with a single policy-free request shape.
+Phase 17B/17C will finalize namespace removal and SDK file-first primitives.
