@@ -107,6 +107,27 @@
 - [x] Add executable spec tests for bootstrap schema + CLI argument parsing
 - [x] Update README/spec docs with bootstrap flow and deployment order
 
+## Phase 14 - v2 Boundary Lock (Service/SDK)
+- [x] Redefine `MEMORY_SERVICE_SPEC.md` to policy-free v2 target boundary
+- [x] Redefine `SDK_SPEC.md` so policy/binding/slot validation is SDK-owned
+- [x] Add explicit v1 -> v2 compatibility mapping in both specs
+
+## Phase 15 - Service v2 Migration
+- [ ] Refactor runtime checks into service-core guards vs policy-dependent checks
+- [ ] Add v2 request contracts without `policy_id`/`binding_id`
+- [ ] Keep v1 request compatibility during migration window
+- [ ] Migrate `context:assemble` to explicit document refs
+- [ ] Migrate `retention:apply` to explicit retention settings
+- [ ] Update spec tests to cover both v1 compatibility and v2 native behavior
+
+## Phase 16 - SDK Delivery
+- [ ] Create solution projects for `MemNet.Client` and `MemNet.AgentMemory`
+- [ ] Implement low-level v2 endpoint client with typed error mapping
+- [ ] Implement ETag conflict helper (`UpdateWithRetryAsync`) with bounded retries
+- [ ] Implement high-level `AgentMemory` facade (`PrepareTurnAsync`, `RecallAsync`, `RememberAsync`)
+- [ ] Add SDK contract tests against local service harness
+- [ ] Add SDK quickstart samples to `README.md`
+
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)

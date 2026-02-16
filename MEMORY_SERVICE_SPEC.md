@@ -1,52 +1,50 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Active v1 implementation  
-Version: 1.2  
+Status: Active (v1), v2 migration in progress  
+Version: 2.0 (target)  
 Last Updated: February 16, 2026
 
 ## 1. Purpose
-`mem.net` is a shared memory service for multi-agent systems using a unified `(tenant_id, user_id)` identity.
+`mem.net` is a shared memory service for multi-agent systems using `(tenant_id, user_id)` scope.
 
-The service provides:
-- durable document storage with optimistic concurrency
-- policy-based write guardrails
-- deterministic context assembly
-- event digest write/search
-- lifecycle operations (retention and forget-user)
+The v2 service focuses on infrastructure primitives:
+- durable document storage
+- optimistic concurrency via ETag
+- event digest write + search
+- lifecycle cleanup (retention and forget-user)
 
-## 2. First-Principles Scope (v1)
-Only four runtime capabilities are in scope:
-1. Resolve logical memory bindings to concrete files.
-2. Enforce safe writes (path allowlists + size/shape limits).
-3. Assemble context deterministically with bounded budgets.
-4. Apply lifecycle cleanup rules.
+`mem.net` does not own application-level memory semantics (policy categories, slot names, schema preferences).
 
-If a new concept does not directly support one of these four capabilities, it is out of v1 runtime scope.
+## 2. First-Principles Scope (v2)
+Only these runtime capabilities are in scope:
+1. Scope isolation and document/event storage.
+2. Conflict-safe writes with explicit `If-Match` semantics.
+3. Deterministic context assembly from caller-provided document refs.
+4. Lifecycle cleanup execution.
 
-## 3. Out of Scope (v1)
-- Runtime confidence gates.
-- Runtime compaction jobs.
-- Separate runtime schema registry.
-- End-user editing UI.
-- Autonomous policy generation by LLMs.
+Anything outside these capabilities belongs in SDK/application layers.
 
-These may be added later as optional modules.
+## 3. Out of Scope (v2 Runtime)
+- Server-side policy registry and binding model.
+- Server-side schema/path guardrails for app-specific documents.
+- Server-side memory category semantics (profile, projects, long-term memory, etc.).
+- Prompt/context strategy owned by agent code.
 
 ## 4. High-Level Architecture
 - API service (ASP.NET Core Minimal API)
   - document read/patch/replace
-  - context assembly
+  - explicit-doc context assembly
   - event write/search
   - retention/forget-user
 - Persistence provider
   - `filesystem` (default)
   - `azure` (Blob + optional AI Search, build-flag gated)
-- Derived index
+- Derived event index
   - local in-memory scoring for filesystem provider
   - Azure AI Search when configured for azure provider
 
-Source of truth is document/event/audit blobs/files. Search index is derived.
+Source of truth is documents/events/audits/snapshots in storage. Search index is derived state.
 
 ## 5. Storage Layout (Reference)
 `/tenants/{tenant_id}/users/{user_id}/documents/{namespace}/{path}`  
@@ -54,55 +52,12 @@ Source of truth is document/event/audit blobs/files. Search index is derived.
 `/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`  
 `/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`
 
-## 6. Policy Model
-Runtime behavior is configured from `Policy/policy.json` (or from `MEMNET_CONFIG_ROOT` pointing to the policy directory).
-
-### 6.1 Policy File Shape
-```json
-{
-  "policies": [
-    {
-      "policy_id": "project-copilot-v1",
-      "document_bindings": [
-        {
-          "binding_id": "user_dynamic",
-          "namespace": "user",
-          "path": "user_dynamic.json",
-          "path_template": null,
-          "schema_id": "memory.user.dynamic",
-          "schema_version": "1.0.0",
-          "max_chars": 18000,
-          "read_priority": 20,
-          "write_mode": "restricted_patch",
-          "allowed_paths": ["/preferences", "/durable_facts", "/pending_confirmations", "/projects_index"],
-          "required_content_paths": ["/preferences"],
-          "max_content_chars": 14000,
-          "max_array_items": 300
-        }
-      ],
-      "retention_rules": {
-        "snapshots_days": 60,
-        "events_days": 365,
-        "audit_days": 365
-      }
-    }
-  ]
-}
-```
-
-### 6.2 Binding Semantics
-- `path` for fixed documents.
-- `path_template` for project-scoped documents (for example `{project_id}.json`).
-- `allowed_paths` controls writable `PATCH` paths.
-- `required_content_paths`, `max_content_chars`, and `max_array_items` enforce structure/size constraints.
-- `write_mode` controls replace permissions (`replace_allowed` required for `PUT`).
-
-## 7. Core Data Contracts
-### 7.1 Document Envelope
+## 6. Core Data Contracts
+### 6.1 Document Envelope
 ```json
 {
   "doc_id": "uuid",
-  "schema_id": "memory.user.dynamic",
+  "schema_id": "app.schema.id",
   "schema_version": "1.0.0",
   "created_at": "2026-02-15T00:00:00Z",
   "updated_at": "2026-02-15T00:00:00Z",
@@ -111,7 +66,11 @@ Runtime behavior is configured from `Policy/policy.json` (or from `MEMNET_CONFIG
 }
 ```
 
-### 7.2 Event Digest
+Notes:
+- `schema_id` and `schema_version` are stored transparently.
+- Service does not interpret app schema semantics beyond payload sanity/limits.
+
+### 6.2 Event Digest
 ```json
 {
   "event_id": "evt_01",
@@ -132,38 +91,33 @@ Runtime behavior is configured from `Policy/policy.json` (or from `MEMNET_CONFIG
 }
 ```
 
-### 7.3 Replay Patch Record (Internal)
+## 7. API Specification (v2)
+All endpoints are server-to-server and scoped by `(tenantId, userId)`.
+
+### 7.1 Service Status
+`GET /`
+
+### 7.2 Get Document
+`GET /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
+
+Response:
 ```json
 {
-  "replay_id": "rpl_01",
-  "target_binding_id": "user_dynamic",
-  "target_path": "user_dynamic.json",
-  "base_etag": "\"0x...\"",
-  "ops": [
-    { "op": "add", "path": "/content/preferences/-", "value": "Prefer concise responses." }
-  ],
-  "snapshot_uri": "blob://...",
-  "message_ids": ["m1"]
+  "etag": "\"...\"",
+  "document": { "...": "..." }
 }
 ```
 
-## 8. API Specification
-All endpoints are server-to-server.
-
-### 8.1 Get Document
-`GET /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
-
-### 8.2 Patch Document
+### 7.3 Patch Document
 `PATCH /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
 
 Headers:
-- `If-Match` required.
+- `If-Match` required
+- `X-Service-Id` optional (defaults to `unknown-service`)
 
 Request body:
 ```json
 {
-  "policy_id": "project-copilot-v1",
-  "binding_id": "user_dynamic",
   "ops": [
     { "op": "replace", "path": "/content/preferences/0", "value": "Use concise answers." }
   ],
@@ -176,81 +130,106 @@ Request body:
 }
 ```
 
-### 8.3 Replace Document (Restricted)
+### 7.4 Replace Document
 `PUT /v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}`
 
-Requires `If-Match`. Allowed only when binding `write_mode == replace_allowed`.
+Headers:
+- `If-Match` required
+- `X-Service-Id` optional
 
-### 8.4 Assemble Context
+Request body:
+```json
+{
+  "document": { "...": "..." },
+  "reason": "manual_rewrite",
+  "evidence": {
+    "conversation_id": "c_123",
+    "message_ids": ["m2"],
+    "snapshot_uri": null
+  }
+}
+```
+
+### 7.5 Assemble Context (Explicit Refs)
 `POST /v1/tenants/{tenantId}/users/{userId}/context:assemble`
 
 Request body:
 ```json
 {
-  "policy_id": "project-copilot-v1",
-  "max_docs": 4,
-  "max_chars_total": 30000
+  "documents": [
+    { "namespace": "user", "path": "profile.json" },
+    { "namespace": "user", "path": "long_term_memory.json" }
+  ],
+  "max_docs": 8,
+  "max_chars_total": 40000
 }
 ```
 
 Response includes:
-- `documents[]`
-- `dropped_bindings[]`
+- `documents[]` with resolved doc content + etag
+- `dropped_documents[]` when budgets prevent inclusion
+- missing docs are omitted (not an error)
 
-### 8.5 Write Event Digest
+### 7.6 Write Event Digest
 `POST /v1/tenants/{tenantId}/users/{userId}/events`
 
-### 8.6 Search Events
+Request body:
+```json
+{
+  "event": { "...": "..." }
+}
+```
+
+Returns `202 Accepted` when persisted.
+
+### 7.7 Search Events
 `POST /v1/tenants/{tenantId}/users/{userId}/events:search`
 
 Supports filtering by query/service/source/project/time range/top-k.
 
-### 8.7 Apply Retention
+### 7.8 Apply Retention
 `POST /v1/tenants/{tenantId}/users/{userId}/retention:apply`
 
 Request body:
 ```json
 {
-  "policy_id": "project-copilot-v1",
+  "events_days": 365,
+  "audit_days": 365,
+  "snapshots_days": 60,
   "as_of_utc": null
 }
 ```
 
-### 8.8 Forget User
+### 7.9 Forget User
 `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
 
-## 9. Validation Rules (Runtime)
-For patch/replace operations, the service enforces:
+## 8. Validation Rules (Runtime)
+For document mutations, service enforces:
 - `If-Match` optimistic concurrency.
-- binding existence + namespace/path consistency.
-- `allowed_paths` allowlist checks for patch ops.
-- envelope `schema_id` and `schema_version` must match binding values.
-- total document size <= binding `max_chars`.
-- content size <= binding `max_content_chars` (if set).
-- required content paths present.
-- recursive array length <= binding `max_array_items` (if set).
-- max patch operation count per request (`100`).
+- max patch operation count (`100`).
+- request/body structural validity.
+- envelope payload sanity and bounded size limits (service-level guardrails).
 
-## 10. Conflict Strategy
-Concurrency model is ETag-based optimistic concurrency:
+For events, service enforces required API contract fields.
+
+Service does not enforce app-specific path/schema policies.
+
+## 9. Conflict Strategy
+ETag optimistic concurrency:
 1. Reject stale write (`412 ETAG_MISMATCH`).
-2. Client refetches latest document/etag.
-3. Client rebases and retries.
+2. Caller refetches latest document/etag.
+3. Caller rebases and retries.
 
-Service does not perform multi-document transactions.
+Service does not provide multi-document transactions.
 
-## 11. Context Assembly Behavior
-- Bindings are read by ascending `read_priority`.
-- Only fixed-path bindings are assembled by default.
-- Templated bindings (for example `path_template`) are not auto-expanded in `context:assemble`.
-- Caller loads templated documents on demand via direct document APIs.
-- Event digests are retrieved via `events:search` as a separate API call.
-- `max_docs` and `max_chars_total` budgets are enforced.
-- Dropped bindings are surfaced in response metadata.
+## 10. Context Assembly Behavior
+- Caller provides explicit document refs.
+- Service reads refs in request order.
+- `max_docs` and `max_chars_total` budgets are enforced deterministically.
+- Returned docs include etag + document envelope.
+- `events:search` remains a separate API call.
 
-## 12. Retention and Deletion
-Retention is defined per policy via `retention_rules`.
-
+## 11. Retention and Deletion
 `retention:apply` removes expired:
 - event records
 - audit records
@@ -264,13 +243,12 @@ Retention is defined per policy via `retention_rules`.
 - snapshots
 - derived search docs when enabled
 
-## 13. Error Model
+## 12. Error Model
 Canonical status codes:
 - `400` invalid request
-- `403` write mode / policy restrictions
-- `404` missing document or policy
+- `404` missing resource
 - `412` ETag mismatch
-- `422` validation or path-policy violations
+- `422` semantic validation error
 - `500/503` service/dependency failures
 
 Error payload:
@@ -287,22 +265,22 @@ Error payload:
 }
 ```
 
-## 14. Security Boundary
-System-wide safety/compliance policy is outside user memory storage and not writable through memory APIs.
+## 13. Security Boundary
+System-wide safety/compliance policy is outside memory storage and not writable through memory APIs.
 
-`mem.net` enforces structural safety (path/shape/size/concurrency/audit), not global policy reasoning.
+`mem.net` enforces transport/storage integrity, optimistic concurrency, and auditability.
+Agent/application semantic safety is handled by SDK/application policy logic.
 
-## 15. Observability Requirements
+## 14. Observability Requirements
 Minimum telemetry:
 - request latency by endpoint
-- patch success/error counts (`412`, `422`, etc.)
-- per-binding document size utilization
+- mutation success/error counts (`412`, `422`, etc.)
 - event search latency
 - retention/forget-user deletion counts
 
 Audit records include actor, tenant/user, target path, ETag transition, reason, and evidence pointers.
 
-## 16. Deployment Notes
+## 15. Deployment Notes
 - Provider selected via `MemNet:Provider` or `MEMNET_PROVIDER`.
 - `filesystem` provider runs locally with no cloud dependencies.
 - `azure` provider requires Azure SDK build flag and Azure configuration.
@@ -311,21 +289,42 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 - Bootstrap tool: `tools/MemNet.Bootstrap` with `--check` and `--apply`.
 - Event index schema artifact: `infra/search/events-index.schema.json`.
 
+## 16. Compatibility and Migration (v1 -> v2)
+### 16.1 Breaking Conceptual Changes
+- Server-side `policy_id` ownership removed from runtime contract.
+- Server-side `binding_id` ownership removed from runtime contract.
+- `context:assemble` changes from policy-driven binding expansion to explicit document refs.
+- `retention:apply` changes from `policy_id` to explicit retention settings.
+
+### 16.2 Compatibility Window
+During migration, service may accept both v1 and v2 request shapes for selected endpoints.
+
+Compatibility mapping:
+- `PATCH /documents`
+  - v1: `policy_id`, `binding_id`, `ops`, `reason`, `evidence`
+  - v2: `ops`, `reason`, `evidence`
+- `PUT /documents`
+  - v1: `policy_id`, `binding_id`, `document`, `reason`, `evidence`
+  - v2: `document`, `reason`, `evidence`
+- `POST /context:assemble`
+  - v1: `policy_id`, `max_docs`, `max_chars_total`
+  - v2: `documents[]`, `max_docs`, `max_chars_total`
+- `POST /retention:apply`
+  - v1: `policy_id`, `as_of_utc`
+  - v2: `events_days`, `audit_days`, `snapshots_days`, `as_of_utc`
+
+### 16.3 Final State Goal
+Final v2 runtime removes policy/binding dependencies from service internals.
+Policy, slot mapping, and schema/path guardrails live in SDK/application layers.
+
 ## 17. Deferred Extensions
-The following are intentionally deferred from v1 runtime core:
 - dedicated compaction worker and compaction-specific config
-- confidence-based write gating
-- external schema registry/migration orchestration
 - replay/reindex background orchestration
-- backend composition abstraction (`IMemoryBackend`)
+- multi-document transaction semantics
 
-## 18. Acceptance Criteria (v1)
-1. Policy-driven binding resolution and validation are enforced.
-2. Live patch and replace operations require `If-Match` and enforce ETag semantics.
-3. Context assembly returns deterministic base documents with budget handling.
-4. Event write and search APIs are functional.
-5. Retention and forget-user lifecycle endpoints are functional.
-6. Audit trail is produced for mutating document operations.
-
-## 19. Implementation Status
-Current implementation satisfies v1 acceptance criteria and passes spec tests in `tests/MemNet.MemoryService.SpecTests`.
+## 18. Acceptance Criteria (v2 Target)
+1. Service API supports policy-free document mutation flows.
+2. ETag conflict semantics remain unchanged and explicit.
+3. Context assembly is explicit-doc based and deterministic.
+4. Event write/search and lifecycle endpoints remain functional.
+5. SDK/application can own memory semantics without server coupling.
