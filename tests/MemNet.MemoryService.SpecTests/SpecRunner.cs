@@ -53,6 +53,9 @@ internal sealed partial class SpecRunner
         AddTest(nameof(SdkClientPatchAndGetV2FlowWorksAsync), SdkClientPatchAndGetV2FlowWorksAsync);
         AddTest(nameof(SdkClientMapsApiErrorsAsync), SdkClientMapsApiErrorsAsync);
         AddTest(nameof(SdkClientAssembleAndSearchFlowWorksAsync), SdkClientAssembleAndSearchFlowWorksAsync);
+        AddTest(nameof(AgentMemoryPrepareTurnFlowWorksAsync), AgentMemoryPrepareTurnFlowWorksAsync);
+        AddTest(nameof(AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync), AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync);
+        AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsAsync), SdkUpdateWithRetryResolvesEtagConflictsAsync);
         AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
         AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
 

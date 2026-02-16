@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\MemNet.AgentMemory\MemNet.AgentMemory.csproj" />
     <ProjectReference Include="..\..\src\MemNet.Client\MemNet.Client.csproj" />
     <ProjectReference Include="..\..\src\MemNet.MemoryService\MemNet.MemoryService.csproj" />
     <ProjectReference Include="..\..\tools\MemNet.Bootstrap\MemNet.Bootstrap.csproj" />

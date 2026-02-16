@@ -122,11 +122,11 @@
 
 ## Phase 16 - SDK Delivery
 - [x] Create solution project for `MemNet.Client`
-- [ ] Create solution project for `MemNet.AgentMemory`
+- [x] Create solution project for `MemNet.AgentMemory`
 - [x] Implement low-level v2 endpoint client with typed error mapping
-- [ ] Implement ETag conflict helper (`UpdateWithRetryAsync`) with bounded retries
-- [ ] Implement high-level `AgentMemory` facade (`PrepareTurnAsync`, `RecallAsync`, `RememberAsync`)
-- [ ] Add SDK contract tests against local service harness
+- [x] Implement ETag conflict helper (`UpdateWithRetryAsync`) with bounded retries
+- [x] Implement high-level `AgentMemory` facade (`PrepareTurnAsync`, `RecallAsync`, `RememberAsync`)
+- [x] Add SDK contract tests against local service harness
 - [ ] Add SDK quickstart samples to `README.md`
 
 ## Residual Gaps (Post-Review)
