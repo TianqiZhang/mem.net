@@ -43,8 +43,8 @@ internal sealed partial class SpecRunner
         AddTest(nameof(AssembleContextRejectsEmptyRequestAsync), AssembleContextRejectsEmptyRequestAsync);
         AddTest(nameof(EventSearchReturnsRelevantResultsAsync), EventSearchReturnsRelevantResultsAsync);
 
-        AddTest(nameof(HttpDocumentPatchFlowWorksEndToEndAsync), HttpDocumentPatchFlowWorksEndToEndAsync);
-        AddTest(nameof(HttpDocumentPatchAddOperationWorksEndToEndAsync), HttpDocumentPatchAddOperationWorksEndToEndAsync);
+        AddTest(nameof(HttpFilePatchFlowWorksEndToEndAsync), HttpFilePatchFlowWorksEndToEndAsync);
+        AddTest(nameof(HttpDocumentAliasPatchAddOperationWorksEndToEndAsync), HttpDocumentAliasPatchAddOperationWorksEndToEndAsync);
         AddTest(nameof(HttpContextAssembleReturnsDefaultDocsAsync), HttpContextAssembleReturnsDefaultDocsAsync);
         AddTest(nameof(HttpContextAssembleWithExplicitDocumentsWorksAsync), HttpContextAssembleWithExplicitDocumentsWorksAsync);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);

@@ -809,10 +809,9 @@ internal static class AzurePathBuilder
     {
         var safeTenant = SanitizeSegment(key.TenantId);
         var safeUser = SanitizeSegment(key.UserId);
-        var safeNamespace = SanitizeSegment(key.Namespace);
         var safePath = SanitizePath(key.Path);
 
-        return $"tenants/{safeTenant}/users/{safeUser}/documents/{safeNamespace}/{safePath}";
+        return $"tenants/{safeTenant}/users/{safeUser}/files/{safePath}";
     }
 
     public static string EventPath(string tenantId, string userId, string eventId)
@@ -827,7 +826,7 @@ internal static class AzurePathBuilder
 
     public static string DocumentsPrefix(string tenantId, string userId)
     {
-        return $"tenants/{SanitizeSegment(tenantId)}/users/{SanitizeSegment(userId)}/documents/";
+        return $"tenants/{SanitizeSegment(tenantId)}/users/{SanitizeSegment(userId)}/files/";
     }
 
     public static string AuditPrefix(string tenantId, string userId)

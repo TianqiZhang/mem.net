@@ -17,7 +17,7 @@ public sealed class MemoryCoordinator(
 
     public async Task<DocumentRecord> GetDocumentAsync(DocumentKey key, CancellationToken cancellationToken = default)
     {
-        using var scope = BeginScope("document_get", key.TenantId, key.UserId, key.Namespace, key.Path);
+        using var scope = BeginScope("document_get", key.TenantId, key.UserId, key.Path);
         logger.LogInformation("Reading document.");
 
         var result = await documentStore.GetAsync(key, cancellationToken);
@@ -37,7 +37,7 @@ public sealed class MemoryCoordinator(
         string actor,
         CancellationToken cancellationToken = default)
     {
-        using var scope = BeginScope("document_patch", key.TenantId, key.UserId, key.Namespace, key.Path);
+        using var scope = BeginScope("document_patch", key.TenantId, key.UserId, key.Path);
         logger.LogInformation("Patching document.");
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
@@ -74,7 +74,6 @@ public sealed class MemoryCoordinator(
             Actor: actor,
             TenantId: key.TenantId,
             UserId: key.UserId,
-            Namespace: key.Namespace,
             Path: key.Path,
             PreviousETag: ifMatch,
             NewETag: saved.ETag,
@@ -94,7 +93,7 @@ public sealed class MemoryCoordinator(
         string actor,
         CancellationToken cancellationToken = default)
     {
-        using var scope = BeginScope("document_replace", key.TenantId, key.UserId, key.Namespace, key.Path);
+        using var scope = BeginScope("document_replace", key.TenantId, key.UserId, key.Path);
         logger.LogInformation("Replacing document.");
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
@@ -111,7 +110,6 @@ public sealed class MemoryCoordinator(
             Actor: actor,
             TenantId: key.TenantId,
             UserId: key.UserId,
-            Namespace: key.Namespace,
             Path: key.Path,
             PreviousETag: ifMatch,
             NewETag: saved.ETag,
@@ -150,7 +148,7 @@ public sealed class MemoryCoordinator(
                 continue;
             }
 
-            var key = new DocumentKey(tenantId, userId, requested.Namespace, requested.Path);
+            var key = new DocumentKey(tenantId, userId, BuildScopedPath(requested.Namespace, requested.Path));
             var doc = await documentStore.GetAsync(key, cancellationToken);
             if (doc is null)
             {
@@ -208,7 +206,6 @@ public sealed class MemoryCoordinator(
         string operation,
         string tenantId,
         string userId,
-        string? @namespace = null,
         string? path = null,
         string? eventId = null)
     {
@@ -217,10 +214,16 @@ public sealed class MemoryCoordinator(
             ["operation"] = operation,
             ["tenant_id"] = tenantId,
             ["user_id"] = userId,
-            ["namespace"] = @namespace,
             ["path"] = path,
             ["event_id"] = eventId
         }) ?? NoopScope;
+    }
+
+    private static string BuildScopedPath(string @namespace, string path)
+    {
+        var ns = (@namespace ?? string.Empty).Trim('/');
+        var leaf = (path ?? string.Empty).Trim('/');
+        return string.IsNullOrWhiteSpace(ns) ? leaf : $"{ns}/{leaf}";
     }
 
     private sealed class ScopeHandle : IDisposable

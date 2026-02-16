@@ -24,7 +24,7 @@ internal sealed partial class SpecRunner
 
     private static async Task RunDocumentStoreContractAsync(IDocumentStore documentStore)
     {
-        var key = new DocumentKey("tenant-contract", "user-contract", "user", "contract.json");
+        var key = new DocumentKey("tenant-contract", "user-contract", "user/contract.json");
         var now = DateTimeOffset.UtcNow;
         var initial = new DocumentEnvelope(
             DocId: "doc-contract",
@@ -118,8 +118,7 @@ internal sealed partial class SpecRunner
             Actor: "contract-tests",
             TenantId: tenantId,
             UserId: userId,
-            Namespace: "user",
-            Path: "long_term_memory.json",
+            Path: "user/long_term_memory.json",
             PreviousETag: "\"prev\"",
             NewETag: "\"new\"",
             Reason: "contract-check",

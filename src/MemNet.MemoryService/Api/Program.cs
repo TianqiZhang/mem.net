@@ -59,16 +59,14 @@ app.Use(async (context, next) =>
 
 app.MapGet("/", () => Results.Ok(new { service = "mem.net", status = "ok" }));
 
-app.MapGet("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**path}", async (
+app.MapGet("/v1/tenants/{tenantId}/users/{userId}/files/{**path}", async (
     [FromRoute] string tenantId,
     [FromRoute] string userId,
-    [FromRoute(Name = "namespace")] string namespaceName,
     [FromRoute] string path,
     MemoryCoordinator coordinator,
     CancellationToken cancellationToken) =>
 {
-    var decodedPath = Uri.UnescapeDataString(path);
-    var key = new DocumentKey(tenantId, userId, namespaceName, decodedPath);
+    var key = BuildDocumentKey(tenantId, userId, path);
     var doc = await coordinator.GetDocumentAsync(key, cancellationToken);
     return Results.Ok(new
     {
@@ -77,18 +75,32 @@ app.MapGet("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**path}
     });
 });
 
-app.MapPatch("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**path}", async (
+app.MapGet("/v1/tenants/{tenantId}/users/{userId}/documents/{**path}", async (
     [FromRoute] string tenantId,
     [FromRoute] string userId,
-    [FromRoute(Name = "namespace")] string namespaceName,
+    [FromRoute] string path,
+    MemoryCoordinator coordinator,
+    CancellationToken cancellationToken) =>
+{
+    var key = BuildDocumentKey(tenantId, userId, path);
+    var doc = await coordinator.GetDocumentAsync(key, cancellationToken);
+    return Results.Ok(new
+    {
+        etag = doc.ETag,
+        document = doc.Envelope
+    });
+});
+
+app.MapPatch("/v1/tenants/{tenantId}/users/{userId}/files/{**path}", async (
+    [FromRoute] string tenantId,
+    [FromRoute] string userId,
     [FromRoute] string path,
     [FromBody] PatchDocumentRequest request,
     HttpContext httpContext,
     MemoryCoordinator coordinator,
     CancellationToken cancellationToken) =>
 {
-    var decodedPath = Uri.UnescapeDataString(path);
-    var key = new DocumentKey(tenantId, userId, namespaceName, decodedPath);
+    var key = BuildDocumentKey(tenantId, userId, path);
     var ifMatch = httpContext.Request.Headers.IfMatch.ToString();
     var actor = httpContext.Request.Headers["X-Service-Id"].ToString();
     if (string.IsNullOrWhiteSpace(actor))
@@ -104,18 +116,66 @@ app.MapPatch("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**pat
     });
 });
 
-app.MapPut("/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{**path}", async (
+app.MapPatch("/v1/tenants/{tenantId}/users/{userId}/documents/{**path}", async (
     [FromRoute] string tenantId,
     [FromRoute] string userId,
-    [FromRoute(Name = "namespace")] string namespaceName,
+    [FromRoute] string path,
+    [FromBody] PatchDocumentRequest request,
+    HttpContext httpContext,
+    MemoryCoordinator coordinator,
+    CancellationToken cancellationToken) =>
+{
+    var key = BuildDocumentKey(tenantId, userId, path);
+    var ifMatch = httpContext.Request.Headers.IfMatch.ToString();
+    var actor = httpContext.Request.Headers["X-Service-Id"].ToString();
+    if (string.IsNullOrWhiteSpace(actor))
+    {
+        actor = "unknown-service";
+    }
+
+    var result = await coordinator.PatchDocumentAsync(key, request, ifMatch, actor, cancellationToken);
+    return Results.Ok(new
+    {
+        etag = result.ETag,
+        document = result.Document
+    });
+});
+
+app.MapPut("/v1/tenants/{tenantId}/users/{userId}/files/{**path}", async (
+    [FromRoute] string tenantId,
+    [FromRoute] string userId,
     [FromRoute] string path,
     [FromBody] ReplaceDocumentRequest request,
     HttpContext httpContext,
     MemoryCoordinator coordinator,
     CancellationToken cancellationToken) =>
 {
-    var decodedPath = Uri.UnescapeDataString(path);
-    var key = new DocumentKey(tenantId, userId, namespaceName, decodedPath);
+    var key = BuildDocumentKey(tenantId, userId, path);
+    var ifMatch = httpContext.Request.Headers.IfMatch.ToString();
+    var actor = httpContext.Request.Headers["X-Service-Id"].ToString();
+    if (string.IsNullOrWhiteSpace(actor))
+    {
+        actor = "unknown-service";
+    }
+
+    var result = await coordinator.ReplaceDocumentAsync(key, request, ifMatch, actor, cancellationToken);
+    return Results.Ok(new
+    {
+        etag = result.ETag,
+        document = result.Document
+    });
+});
+
+app.MapPut("/v1/tenants/{tenantId}/users/{userId}/documents/{**path}", async (
+    [FromRoute] string tenantId,
+    [FromRoute] string userId,
+    [FromRoute] string path,
+    [FromBody] ReplaceDocumentRequest request,
+    HttpContext httpContext,
+    MemoryCoordinator coordinator,
+    CancellationToken cancellationToken) =>
+{
+    var key = BuildDocumentKey(tenantId, userId, path);
     var ifMatch = httpContext.Request.Headers.IfMatch.ToString();
     var actor = httpContext.Request.Headers["X-Service-Id"].ToString();
     if (string.IsNullOrWhiteSpace(actor))
@@ -192,5 +252,11 @@ app.MapPost("/v1/tenants/{tenantId}/users/{userId}/retention:apply", async (
 });
 
 app.Run();
+
+static DocumentKey BuildDocumentKey(string tenantId, string userId, string path)
+{
+    var decodedPath = Uri.UnescapeDataString(path);
+    return new DocumentKey(tenantId, userId, decodedPath);
+}
 
 public partial class Program;

@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace MemNet.MemoryService.Core;
 
-public sealed record DocumentKey(string TenantId, string UserId, string Namespace, string Path);
+public sealed record DocumentKey(string TenantId, string UserId, string Path);
 
 public sealed record DocumentEnvelope(
     string DocId,

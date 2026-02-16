@@ -4,13 +4,13 @@ using System.Text.Json.Nodes;
 
 internal sealed partial class SpecRunner
 {
-    private static async Task HttpDocumentPatchFlowWorksEndToEndAsync()
+    private static async Task HttpFilePatchFlowWorksEndToEndAsync()
     {
         using var scope = TestScope.Create();
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
-        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
+        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/files/user/long_term_memory.json";
 
         var getResponse = await client.GetAsync(route);
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
@@ -61,7 +61,7 @@ internal sealed partial class SpecRunner
         Assert.Equal(HttpStatusCode.PreconditionFailed, staleResponse.StatusCode);
     }
 
-    private static async Task HttpDocumentPatchAddOperationWorksEndToEndAsync()
+    private static async Task HttpDocumentAliasPatchAddOperationWorksEndToEndAsync()
     {
         using var scope = TestScope.Create();
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);

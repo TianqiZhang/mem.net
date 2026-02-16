@@ -79,10 +79,9 @@ public sealed class FileDocumentStore(StorageOptions options) : IDocumentStore
     {
         var safeTenant = SanitizeSegment(key.TenantId);
         var safeUser = SanitizeSegment(key.UserId);
-        var safeNamespace = SanitizeSegment(key.Namespace);
         var safePath = SanitizePath(key.Path);
 
-        return Path.Combine(dataRoot, "tenants", safeTenant, "users", safeUser, "documents", safeNamespace, safePath);
+        return Path.Combine(dataRoot, "tenants", safeTenant, "users", safeUser, "files", safePath);
     }
 
     private static string SanitizeSegment(string value)
@@ -280,7 +279,7 @@ public sealed class FileUserDataMaintenanceStore(StorageOptions options) : IUser
             return Task.FromResult(new ForgetUserResult(0, 0, 0, 0, 0));
         }
 
-        var documentsDeleted = CountFiles(Path.Combine(userRoot, "documents"), "*.json");
+        var documentsDeleted = CountFiles(Path.Combine(userRoot, "files"), "*.json");
         var eventsDeleted = CountFiles(Path.Combine(userRoot, "events"), "*.json");
         var auditDeleted = CountFiles(Path.Combine(userRoot, "audit"), "*.json");
         var snapshotsDeleted = CountFiles(Path.Combine(userRoot, "snapshots"), "*");

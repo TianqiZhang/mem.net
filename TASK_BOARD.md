@@ -144,8 +144,8 @@
 - [x] Update `MEMORY_SERVICE_SPEC.md` and `SDK_SPEC.md` with authoritative file-first contracts and pre-release boundary
 
 ### 17B - API Simplification First (Service)
-- [ ] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API
-- [ ] Remove public `namespace` concept from service contracts/domain models/audit records
+- [x] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API (legacy `/documents/{**path}` alias retained temporarily for SDK migration)
+- [-] Remove public `namespace` concept from service contracts/domain models/audit records (domain/storage/audit complete; request/response contract cleanup pending)
 - [ ] Change `context:assemble` request/response from `documents[]` to path-only `files[]`
 - [ ] Implement deterministic text patch (`old_text`/`new_text`/`occurrence`) for file API
 - [ ] Keep events/search/lifecycle behavior unchanged

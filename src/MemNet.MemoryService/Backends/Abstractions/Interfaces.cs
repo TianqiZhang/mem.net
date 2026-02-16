@@ -57,7 +57,6 @@ public sealed record AuditRecord(
     string Actor,
     string TenantId,
     string UserId,
-    string Namespace,
     string Path,
     string? PreviousETag,
     string NewETag,

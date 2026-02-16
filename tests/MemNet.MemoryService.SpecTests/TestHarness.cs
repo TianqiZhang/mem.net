@@ -332,9 +332,9 @@ internal sealed class ServiceHost : IDisposable
 
 internal sealed record TestKeys(string Tenant, string User)
 {
-    public DocumentKey UserProfile => new(Tenant, User, "user", "profile.json");
+    public DocumentKey UserProfile => new(Tenant, User, "user/profile.json");
 
-    public DocumentKey LongTermMemory => new(Tenant, User, "user", "long_term_memory.json");
+    public DocumentKey LongTermMemory => new(Tenant, User, "user/long_term_memory.json");
 
-    public DocumentKey ProjectAlpha => new(Tenant, User, "projects", "project-alpha.json");
+    public DocumentKey ProjectAlpha => new(Tenant, User, "projects/project-alpha.json");
 }
