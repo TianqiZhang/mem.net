@@ -180,12 +180,14 @@ internal sealed partial class SpecRunner
                     digest = "HTTP integration event for retrieval latency.",
                     keywords = new[] { "retrieval", "latency" },
                     project_ids = new[] { "project-alpha" },
-                    snapshot_uri = "blob://snapshots/http",
                     evidence = new
                     {
+                        source = "chat",
+                        snapshot_uri = "blob://snapshots/http",
                         message_ids = new[] { "m-http-1" },
                         start = 1,
-                        end = 2
+                        end = 2,
+                        tool_call_id = "tool-http-1"
                     }
                 }
             });
@@ -252,8 +254,13 @@ internal sealed partial class SpecRunner
                     digest = "Old event",
                     keywords = new[] { "old" },
                     project_ids = new[] { "project-alpha" },
-                    snapshot_uri = "blob://snapshots/old",
-                    evidence = new { message_ids = new[] { "m-old" }, start = 1, end = 1 }
+                    evidence = new
+                    {
+                        source = "chat",
+                        snapshot_uri = "blob://snapshots/old",
+                        message_ids = new[] { "m-old" },
+                        offsets = new[] { 1, 1 }
+                    }
                 }
             });
         Assert.Equal(HttpStatusCode.Accepted, oldEventResponse.StatusCode);
@@ -273,8 +280,13 @@ internal sealed partial class SpecRunner
                     digest = "Fresh event",
                     keywords = new[] { "fresh" },
                     project_ids = new[] { "project-alpha" },
-                    snapshot_uri = "blob://snapshots/fresh",
-                    evidence = new { message_ids = new[] { "m-fresh" }, start = 1, end = 1 }
+                    evidence = new
+                    {
+                        source = "chat",
+                        snapshot_uri = "blob://snapshots/fresh",
+                        message_ids = new[] { "m-fresh" },
+                        offsets = new[] { 1, 1 }
+                    }
                 }
             });
         Assert.Equal(HttpStatusCode.Accepted, freshEventResponse.StatusCode);
@@ -333,8 +345,13 @@ internal sealed partial class SpecRunner
                     digest = "Old event retention request-shape test",
                     keywords = new[] { "old" },
                     project_ids = new[] { "project-alpha" },
-                    snapshot_uri = "blob://snapshots/old-shape",
-                    evidence = new { message_ids = new[] { "m-old-shape" }, start = 1, end = 1 }
+                    evidence = new
+                    {
+                        source = "retention-tests",
+                        snapshot_uri = "blob://snapshots/old-shape",
+                        message_ids = new[] { "m-old-shape" },
+                        extra = new { actor = "scheduler" }
+                    }
                 }
             });
         Assert.Equal(HttpStatusCode.Accepted, writeEventResponse.StatusCode);
@@ -409,8 +426,13 @@ internal sealed partial class SpecRunner
                     digest = "Forget flow event",
                     keywords = new[] { "forget" },
                     project_ids = new[] { "project-alpha" },
-                    snapshot_uri = "blob://snapshots/forget",
-                    evidence = new { message_ids = new[] { "m-forget" }, start = 1, end = 1 }
+                    evidence = new
+                    {
+                        source = "chat",
+                        snapshot_uri = "blob://snapshots/forget",
+                        message_ids = new[] { "m-forget" },
+                        reason = "forget-flow-seed"
+                    }
                 }
             });
         Assert.Equal(HttpStatusCode.Accepted, eventResponse.StatusCode);

@@ -164,6 +164,7 @@
 
 ### 17E - Documentation and Cleanup
 - [ ] Add migration guide from slot/policy-oriented SDK usage to file-like memory tools
+- [x] Make mutation/event evidence payloads opaque JSON across service + SDK contracts
 - [x] Remove policy runtime module and compatibility-field references from service/docs
 - [x] Update README examples to use markdown-first files and 4-tool contract only
 - [ ] Close Phase 17 only after full build + spec tests pass and docs/specs are in sync

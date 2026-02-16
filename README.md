@@ -21,6 +21,7 @@ Application-specific memory semantics (categories, slot rules, schemas) are owne
 - File read/patch/write with ETag optimistic concurrency.
 - Context assembly from explicit file refs with budget controls.
 - Event digest write/search.
+- Opaque evidence payload support (service stores evidence JSON without app-specific schema coupling).
 - Retention and forget-user lifecycle operations.
 - Pluggable provider mode:
   - `filesystem` (default local mode)

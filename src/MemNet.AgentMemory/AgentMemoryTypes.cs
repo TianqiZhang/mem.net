@@ -38,13 +38,13 @@ public sealed record PreparedSlotDocument(
 public sealed record SlotPatchRequest(
     IReadOnlyList<MemNet.Client.PatchOperation> Ops,
     string Reason,
-    MemNet.Client.EvidenceRef? Evidence = null,
+    JsonNode? Evidence = null,
     IReadOnlyDictionary<string, string>? TemplateVariables = null);
 
 public sealed record SlotReplaceRequest(
     MemNet.Client.DocumentEnvelope Document,
     string Reason,
-    MemNet.Client.EvidenceRef? Evidence = null,
+    JsonNode? Evidence = null,
     IReadOnlyDictionary<string, string>? TemplateVariables = null);
 
 public sealed record RecallRequest(

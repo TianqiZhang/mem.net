@@ -11,10 +11,7 @@ public sealed class ReplayService(MemoryCoordinator coordinator)
         var patchRequest = new PatchDocumentRequest(
             Ops: replay.Ops,
             Reason: "replay_update",
-            Evidence: new EvidenceRef(
-                ConversationId: null,
-                MessageIds: replay.MessageIds,
-                SnapshotUri: replay.SnapshotUri));
+            Evidence: replay.Evidence);
 
         return coordinator.PatchDocumentAsync(key, patchRequest, replay.BaseETag, actor, cancellationToken);
     }

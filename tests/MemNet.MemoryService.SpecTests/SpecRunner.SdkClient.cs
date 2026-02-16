@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Nodes;
 
 internal sealed partial class SpecRunner
 {
@@ -117,8 +118,12 @@ internal sealed partial class SpecRunner
                     Digest: "SDK client end to end event",
                     Keywords: ["sdk", "event"],
                     ProjectIds: ["project-alpha"],
-                    SnapshotUri: "blob://snapshots/sdk",
-                    Evidence: new MemNet.Client.EventEvidence(["m-sdk"], 1, 1))));
+                    Evidence: new JsonObject
+                    {
+                        ["source"] = "sdk-tests",
+                        ["message_ids"] = new JsonArray("m-sdk"),
+                        ["snapshot_uri"] = "blob://snapshots/sdk"
+                    })));
 
         var search = await client.SearchEventsAsync(
             memScope,

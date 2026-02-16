@@ -44,14 +44,14 @@ Anything outside these capabilities belongs in SDK/application layers.
   - local in-memory scoring for filesystem provider
   - Azure AI Search when configured for azure provider
 
-Source of truth is files/events/audits/snapshots in storage. Search index is derived state.
+Source of truth is files/events/audits in storage. Search index is derived state.
 
 ## 5. Storage Layout (Reference)
 Storage layout:
 `/tenants/{tenant_id}/users/{user_id}/files/{path}`  
 `/tenants/{tenant_id}/users/{user_id}/events/{event_id}.json`  
 `/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`  
-`/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`
+`/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json` (optional external snapshot material)
 
 ## 6. Core Data Contracts
 ### 6.1 File Envelope
@@ -83,11 +83,10 @@ Notes:
   "digest": "short summary",
   "keywords": ["memory"],
   "project_ids": ["project-alpha"],
-  "snapshot_uri": "blob://...",
   "evidence": {
+    "source": "chat",
     "message_ids": ["m1"],
-    "start": 1,
-    "end": 2
+    "snapshot_uri": "blob://..."
   }
 }
 ```
@@ -128,9 +127,9 @@ Request body:
   ],
   "reason": "preference_update",
   "evidence": {
+    "source": "chat",
     "conversation_id": "c_123",
-    "message_ids": ["m1"],
-    "snapshot_uri": null
+    "trace_id": "abc-123"
   }
 }
 ```
@@ -148,9 +147,9 @@ Request body:
   "document": { "...": "..." },
   "reason": "manual_rewrite",
   "evidence": {
-    "conversation_id": "c_123",
-    "message_ids": ["m2"],
-    "snapshot_uri": null
+    "source": "tool",
+    "tool_call_id": "call_01",
+    "notes": ["manual override"]
   }
 }
 ```
@@ -224,6 +223,7 @@ For file mutations, service enforces:
 - request/body structural validity and envelope payload size limits.
 
 For events, service enforces required API contract fields.
+`evidence` is treated as opaque JSON and is persisted without schema interpretation.
 
 Service does not enforce app-specific path/schema policies.
 
@@ -291,7 +291,7 @@ Minimum telemetry:
 - event search latency
 - retention/forget-user deletion counts
 
-Audit records include actor, tenant/user, target path, ETag transition, reason, and evidence pointers.
+Audit records include actor, tenant/user, target path, ETag transition, reason, and opaque evidence payload.
 
 ## 15. Deployment Notes
 - Provider selected via `MemNet:Provider` or `MEMNET_PROVIDER`.

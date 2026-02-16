@@ -5,7 +5,7 @@ namespace MemNet.MemoryService.Core;
 public sealed record PatchDocumentRequest(
     IReadOnlyList<PatchOperation> Ops,
     string Reason,
-    EvidenceRef? Evidence,
+    JsonNode? Evidence,
     IReadOnlyList<TextPatchEdit>? Edits = null);
 
 public sealed record TextPatchEdit(
@@ -16,12 +16,7 @@ public sealed record TextPatchEdit(
 public sealed record ReplaceDocumentRequest(
     DocumentEnvelope Document,
     string Reason,
-    EvidenceRef? Evidence);
-
-public sealed record EvidenceRef(
-    string? ConversationId,
-    IReadOnlyList<string>? MessageIds,
-    string? SnapshotUri);
+    JsonNode? Evidence);
 
 public sealed record AssembleContextRequest(
     IReadOnlyList<AssembleFileRef> Files,

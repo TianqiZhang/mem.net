@@ -73,8 +73,12 @@ internal sealed partial class SpecRunner
             Digest: "Event contract baseline for retrieval latency.",
             Keywords: ["retrieval", "latency"],
             ProjectIds: ["project-contract"],
-            SnapshotUri: "blob://contract/1",
-            Evidence: new EventEvidence(["m1"], 1, 1)));
+            Evidence: new JsonObject
+            {
+                ["source"] = "contract-tests",
+                ["message_ids"] = new JsonArray("m1"),
+                ["snapshot_uri"] = "blob://contract/1"
+            }));
 
         await eventStore.WriteAsync(new EventDigest(
             EventId: "evt-contract-2",
@@ -86,8 +90,12 @@ internal sealed partial class SpecRunner
             Digest: "Unrelated event digest.",
             Keywords: ["general"],
             ProjectIds: ["project-other"],
-            SnapshotUri: "blob://contract/2",
-            Evidence: new EventEvidence(["m2"], 1, 2)));
+            Evidence: new JsonObject
+            {
+                ["source"] = "contract-tests",
+                ["message_ids"] = new JsonArray("m2"),
+                ["snapshot_uri"] = "blob://contract/2"
+            }));
 
         var filtered = await eventStore.QueryAsync(
             tenantId,
@@ -124,7 +132,11 @@ internal sealed partial class SpecRunner
             Reason: "contract-check",
             Ops: [new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("contract"))],
             Timestamp: DateTimeOffset.UtcNow,
-            EvidenceMessageIds: ["m-audit-1"]);
+            Evidence: new JsonObject
+            {
+                ["source"] = "contract-tests",
+                ["message_ids"] = new JsonArray("m-audit-1")
+            });
 
         await auditStore.WriteAsync(record);
         Assert.True(auditRecordExists(changeId), "Audit contract expected persisted audit record.");

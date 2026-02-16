@@ -17,7 +17,12 @@ internal sealed partial class SpecRunner
                     new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("Use concise answers with examples."))
                 ],
                 Reason: "live_update",
-                Evidence: new EvidenceRef("conv1", ["m1"], null)),
+                Evidence: new JsonObject
+                {
+                    ["source"] = "chat",
+                    ["conversation_id"] = "conv1",
+                    ["message_ids"] = new JsonArray("m1")
+                }),
             ifMatch: seeded.ETag,
             actor: "spec-tests");
 
@@ -255,8 +260,12 @@ internal sealed partial class SpecRunner
             Digest: "Investigated retrieval latency in project alpha.",
             Keywords: ["retrieval", "latency"],
             ProjectIds: ["project-alpha"],
-            SnapshotUri: "blob://snapshots/1",
-            Evidence: new EventEvidence(["m1"], 1, 2)));
+            Evidence: new JsonObject
+            {
+                ["source"] = "chat",
+                ["message_ids"] = new JsonArray("m1"),
+                ["snapshot_uri"] = "blob://snapshots/1"
+            }));
 
         await scope.Coordinator.WriteEventAsync(new EventDigest(
             EventId: "evt2",
@@ -268,8 +277,12 @@ internal sealed partial class SpecRunner
             Digest: "General preferences update.",
             Keywords: ["preferences"],
             ProjectIds: ["project-beta"],
-            SnapshotUri: "blob://snapshots/2",
-            Evidence: new EventEvidence(["m2"], 3, 4)));
+            Evidence: new JsonObject
+            {
+                ["source"] = "chat",
+                ["message_ids"] = new JsonArray("m2"),
+                ["snapshot_uri"] = "blob://snapshots/2"
+            }));
 
         var search = await scope.Coordinator.SearchEventsAsync(
             scope.Keys.Tenant,

@@ -26,21 +26,16 @@ public sealed record TextPatchEdit(
     string NewText,
     int? Occurrence = null);
 
-public sealed record EvidenceRef(
-    string? ConversationId,
-    IReadOnlyList<string>? MessageIds,
-    string? SnapshotUri);
-
 public sealed record PatchDocumentRequest(
     IReadOnlyList<PatchOperation> Ops,
     string Reason,
-    EvidenceRef? Evidence = null,
+    JsonNode? Evidence = null,
     IReadOnlyList<TextPatchEdit>? Edits = null);
 
 public sealed record ReplaceDocumentRequest(
     DocumentEnvelope Document,
     string Reason,
-    EvidenceRef? Evidence = null);
+    JsonNode? Evidence = null);
 
 public sealed record FileMutationResult(
     [property: JsonPropertyName("etag")]
@@ -74,11 +69,6 @@ public sealed record AssembleContextResponse(
     IReadOnlyList<AssembledFile> Files,
     IReadOnlyList<DroppedFile> DroppedFiles);
 
-public sealed record EventEvidence(
-    IReadOnlyList<string> MessageIds,
-    int? Start,
-    int? End);
-
 public sealed record EventDigest(
     string EventId,
     string TenantId,
@@ -89,8 +79,7 @@ public sealed record EventDigest(
     string Digest,
     IReadOnlyList<string> Keywords,
     IReadOnlyList<string> ProjectIds,
-    string SnapshotUri,
-    EventEvidence Evidence);
+    JsonNode? Evidence);
 
 public sealed record WriteEventRequest(EventDigest Event);
 

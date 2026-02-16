@@ -77,7 +77,7 @@ public sealed class MemoryCoordinator(
             Reason: request.Reason,
             Ops: auditOps,
             Timestamp: now,
-            EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
+            Evidence: request.Evidence), cancellationToken);
 
         logger.LogInformation("Patch completed.");
         return response;
@@ -113,7 +113,7 @@ public sealed class MemoryCoordinator(
             Reason: request.Reason,
             Ops: Array.Empty<PatchOperation>(),
             Timestamp: now,
-            EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
+            Evidence: request.Evidence), cancellationToken);
 
         logger.LogInformation("Replace completed.");
         return response;
@@ -277,7 +277,7 @@ public sealed class MemoryCoordinator(
             UpdatedBy = actor
         };
 
-        // Keep audit contract stable; detailed edit payload can be reconstructed from evidence and before/after snapshots.
+        // Keep audit contract stable; detailed edit payload can be reconstructed from evidence and before/after file states.
         return (patchedEnvelope, Array.Empty<PatchOperation>());
     }
 

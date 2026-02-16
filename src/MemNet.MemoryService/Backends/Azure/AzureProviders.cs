@@ -190,9 +190,22 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
 
         await foreach (var item in response.Value.GetResultsAsync().WithCancellation(cancellationToken))
         {
-            var mapped = FromSearchDocument(item.Document);
+            // Always hydrate from blob source-of-truth so evidence remains opaque and lossless.
+            var eventId = ReadString(item.Document, "event_id") ?? ReadString(item.Document, "id");
+            EventDigest? mapped = null;
+            if (!string.IsNullOrWhiteSpace(eventId))
+            {
+                mapped = await ReadEventDigestFromBlobAsync(tenantId, userId, eventId, cancellationToken);
+            }
+
+            mapped ??= FromSearchDocument(item.Document);
             if (mapped is not null)
             {
+                if (!PassesFilters(mapped, request))
+                {
+                    continue;
+                }
+
                 results.Add(mapped);
             }
 
@@ -219,18 +232,8 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
         {
             await foreach (var blob in clients.EventsContainer.GetBlobsAsync(prefix: prefix, cancellationToken: cancellationToken))
             {
-                var blobClient = clients.EventsContainer.GetBlobClient(blob.Name);
-                EventDigest? digest;
-
-                try
-                {
-                    var download = await blobClient.DownloadContentAsync(cancellationToken: cancellationToken);
-                    digest = JsonSerializer.Deserialize<EventDigest>(download.Value.Content, JsonDefaults.Options);
-                }
-                catch (RequestFailedException)
-                {
-                    continue;
-                }
+                var eventId = Path.GetFileNameWithoutExtension(blob.Name);
+                var digest = await ReadEventDigestFromBlobAsync(tenantId, userId, eventId, cancellationToken);
 
                 if (digest is null || !PassesFilters(digest, request))
                 {
@@ -341,11 +344,7 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
             ["source_type"] = digest.SourceType,
             ["digest"] = digest.Digest,
             ["keywords"] = digest.Keywords.ToArray(),
-            ["project_ids"] = digest.ProjectIds.ToArray(),
-            ["snapshot_uri"] = digest.SnapshotUri,
-            ["evidence_message_ids"] = digest.Evidence.MessageIds.ToArray(),
-            ["evidence_start"] = digest.Evidence.Start,
-            ["evidence_end"] = digest.Evidence.End
+            ["project_ids"] = digest.ProjectIds.ToArray()
         };
     }
 
@@ -364,7 +363,6 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
         var serviceId = ReadString(doc, "service_id");
         var sourceType = ReadString(doc, "source_type");
         var digest = ReadString(doc, "digest");
-        var snapshotUri = ReadString(doc, "snapshot_uri") ?? string.Empty;
         var timestamp = ReadDateTimeOffset(doc, "timestamp");
 
         if (string.IsNullOrWhiteSpace(eventId)
@@ -388,11 +386,36 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
             Digest: digest,
             Keywords: ReadStringList(doc, "keywords"),
             ProjectIds: ReadStringList(doc, "project_ids"),
-            SnapshotUri: snapshotUri,
-            Evidence: new EventEvidence(
-                MessageIds: ReadStringList(doc, "evidence_message_ids"),
-                Start: ReadInt(doc, "evidence_start"),
-                End: ReadInt(doc, "evidence_end")));
+            Evidence: null);
+    }
+
+    private async Task<EventDigest?> ReadEventDigestFromBlobAsync(
+        string tenantId,
+        string userId,
+        string eventId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var blobPath = AzurePathBuilder.EventPath(tenantId, userId, eventId);
+            var download = await clients.EventsContainer
+                .GetBlobClient(blobPath)
+                .DownloadContentAsync(cancellationToken: cancellationToken);
+
+            return JsonSerializer.Deserialize<EventDigest>(download.Value.Content, JsonDefaults.Options);
+        }
+        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        {
+            return null;
+        }
+        catch (RequestFailedException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     internal static string? BuildFilter(string tenantId, string userId, EventSearchRequest request)
@@ -448,22 +471,6 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
             string text => text,
             JsonElement element when element.ValueKind == JsonValueKind.String => element.GetString(),
             _ => value.ToString()
-        };
-    }
-
-    private static int? ReadInt(SearchDocument doc, string key)
-    {
-        if (!doc.TryGetValue(key, out var value) || value is null)
-        {
-            return null;
-        }
-
-        return value switch
-        {
-            int n => n,
-            long n when n is >= int.MinValue and <= int.MaxValue => (int)n,
-            JsonElement element when element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var n) => n,
-            _ => null
         };
     }
 

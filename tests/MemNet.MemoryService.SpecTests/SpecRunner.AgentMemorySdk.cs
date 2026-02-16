@@ -55,8 +55,12 @@ internal sealed partial class SpecRunner
                     Digest: "Agent memory prepare-turn event",
                     Keywords: ["agent", "memory"],
                     ProjectIds: ["project-alpha"],
-                    SnapshotUri: "blob://snapshots/agent-sdk",
-                    Evidence: new MemNet.Client.EventEvidence(["m-agent-sdk"], 1, 1))));
+                    Evidence: new JsonObject
+                    {
+                        ["source"] = "agent-sdk-tests",
+                        ["message_ids"] = new JsonArray("m-agent-sdk"),
+                        ["snapshot_uri"] = "blob://snapshots/agent-sdk"
+                    })));
 
         var prepared = await agentMemory.PrepareTurnAsync(
             memScope,

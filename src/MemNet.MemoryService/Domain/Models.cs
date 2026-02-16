@@ -27,13 +27,7 @@ public sealed record EventDigest(
     string Digest,
     IReadOnlyList<string> Keywords,
     IReadOnlyList<string> ProjectIds,
-    string SnapshotUri,
-    EventEvidence Evidence);
-
-public sealed record EventEvidence(
-    IReadOnlyList<string> MessageIds,
-    int? Start,
-    int? End);
+    JsonNode? Evidence);
 
 public sealed record ReplayPatchRecord(
     string ReplayId,
@@ -41,8 +35,7 @@ public sealed record ReplayPatchRecord(
     string TargetPath,
     string BaseETag,
     IReadOnlyList<PatchOperation> Ops,
-    string SnapshotUri,
-    IReadOnlyList<string> MessageIds);
+    JsonNode? Evidence);
 
 public sealed record RetentionRules(int SnapshotsDays, int EventsDays, int AuditDays);
 

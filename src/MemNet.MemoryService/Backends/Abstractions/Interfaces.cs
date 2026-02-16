@@ -1,4 +1,5 @@
 using MemNet.MemoryService.Core;
+using System.Text.Json.Nodes;
 
 namespace MemNet.MemoryService.Infrastructure;
 
@@ -63,4 +64,4 @@ public sealed record AuditRecord(
     string Reason,
     IReadOnlyList<PatchOperation> Ops,
     DateTimeOffset Timestamp,
-    IReadOnlyList<string>? EvidenceMessageIds);
+    JsonNode? Evidence);
