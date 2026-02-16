@@ -99,6 +99,14 @@
 - [x] Move default policy file to `src/MemNet.MemoryService/Policy/policy.json`
 - [x] Update runtime default config root and test harness paths for policy location
 
+## Phase 13 - Azure Bootstrap and Initialization
+- [x] Add `tools/MemNet.Bootstrap` CLI for deployment-time initialization
+- [x] Add idempotent Blob container provisioning (`--check` / `--apply`)
+- [x] Add Azure AI Search index provisioning via source-controlled schema
+- [x] Add schema artifact `infra/search/events-index.schema.json`
+- [x] Add executable spec tests for bootstrap schema + CLI argument parsing
+- [x] Update README/spec docs with bootstrap flow and deployment order
+
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)

@@ -1,0 +1,87 @@
+{
+  "description": "mem.net event digest index",
+  "fields": [
+    {
+      "name": "id",
+      "type": "Edm.String",
+      "is_key": true,
+      "is_filterable": true,
+      "is_sortable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "event_id",
+      "type": "Edm.String",
+      "is_filterable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "tenant_id",
+      "type": "Edm.String",
+      "is_filterable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "user_id",
+      "type": "Edm.String",
+      "is_filterable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "service_id",
+      "type": "Edm.String",
+      "is_filterable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "timestamp",
+      "type": "Edm.DateTimeOffset",
+      "is_filterable": true,
+      "is_sortable": true
+    },
+    {
+      "name": "source_type",
+      "type": "Edm.String",
+      "is_filterable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "digest",
+      "type": "Edm.String",
+      "is_searchable": true
+    },
+    {
+      "name": "keywords",
+      "type": "Collection(Edm.String)",
+      "is_searchable": true
+    },
+    {
+      "name": "project_ids",
+      "type": "Collection(Edm.String)",
+      "is_filterable": true,
+      "is_searchable": false
+    },
+    {
+      "name": "snapshot_uri",
+      "type": "Edm.String",
+      "is_searchable": false
+    },
+    {
+      "name": "evidence_message_ids",
+      "type": "Collection(Edm.String)",
+      "is_searchable": false
+    },
+    {
+      "name": "evidence_start",
+      "type": "Edm.Int32",
+      "is_filterable": false,
+      "is_sortable": false
+    },
+    {
+      "name": "evidence_end",
+      "type": "Edm.Int32",
+      "is_filterable": false,
+      "is_sortable": false
+    }
+  ]
+}

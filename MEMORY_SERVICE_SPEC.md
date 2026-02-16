@@ -2,8 +2,8 @@
 
 Project: `mem.net`  
 Status: Active v1 implementation  
-Version: 1.1  
-Last Updated: February 15, 2026
+Version: 1.2  
+Last Updated: February 16, 2026
 
 ## 1. Purpose
 `mem.net` is a shared memory service for multi-agent systems using a unified `(tenant_id, user_id)` identity.
@@ -307,6 +307,9 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 - `filesystem` provider runs locally with no cloud dependencies.
 - `azure` provider requires Azure SDK build flag and Azure configuration.
 - If azure provider is selected without Azure SDK build flag, API returns `501 AZURE_PROVIDER_NOT_ENABLED`.
+- Azure AI Search index provisioning is deployment/bootstrap responsibility (not runtime startup mutation).
+- Bootstrap tool: `tools/MemNet.Bootstrap` with `--check` and `--apply`.
+- Event index schema artifact: `infra/search/events-index.schema.json`.
 
 ## 17. Deferred Extensions
 The following are intentionally deferred from v1 runtime core:

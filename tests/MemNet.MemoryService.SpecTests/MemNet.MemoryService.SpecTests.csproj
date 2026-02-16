@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MemNet.MemoryService\MemNet.MemoryService.csproj" />
+    <ProjectReference Include="..\..\tools\MemNet.Bootstrap\MemNet.Bootstrap.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

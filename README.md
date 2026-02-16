@@ -110,6 +110,7 @@ Runtime behavior is driven by `src/MemNet.MemoryService/Policy/policy.json`.
 | `MEMNET_AZURE_AUDIT_CONTAINER` | Audit container |
 | `MEMNET_AZURE_SEARCH_ENDPOINT` | Optional Azure AI Search endpoint |
 | `MEMNET_AZURE_SEARCH_INDEX` | Optional Azure AI Search index |
+| `MEMNET_AZURE_SEARCH_SCHEMA_PATH` | Optional schema path for bootstrap tool (default: `infra/search/events-index.schema.json`) |
 
 ## Azure Provider
 
@@ -133,6 +134,33 @@ dotnet run --project src/MemNet.MemoryService -p:MemNetEnableAzureSdk=true
 ```
 
 If `MEMNET_PROVIDER=azure` is used without Azure SDK build flag, endpoints return `501 AZURE_PROVIDER_NOT_ENABLED`.
+
+## Azure Bootstrap (Init)
+
+`mem.net` runtime does not create Azure AI Search index schemas at startup.
+
+- Blob containers are created lazily on first write.
+- Search index provisioning should be done in deployment/bootstrap.
+
+Use the bootstrap tool:
+
+```bash
+dotnet run --project tools/MemNet.Bootstrap -- azure --check
+dotnet run --project tools/MemNet.Bootstrap -- azure --apply
+```
+
+`--apply` performs idempotent initialization:
+- ensures Blob containers exist
+- creates/updates the configured Azure AI Search index using `infra/search/events-index.schema.json`
+
+Required permissions:
+- Blob container management on the target storage account
+- Search index management (`Search Service Contributor` role or admin API key)
+
+Recommended deployment order:
+1. Deploy infrastructure (Search service, Storage account, identities/roles).
+2. Run bootstrap `--apply`.
+3. Deploy/start `mem.net` service.
 
 ## API Quick Reference
 
@@ -163,6 +191,8 @@ If `MEMNET_PROVIDER=azure` is used without Azure SDK build flag, endpoints retur
 - `src/MemNet.MemoryService/Domain` - core models, errors, and patch engine.
 - `src/MemNet.MemoryService/Policy` - `PolicyRegistry` and default `policy.json`.
 - `src/MemNet.MemoryService/Backends` - store abstractions and provider implementations.
+- `tools/MemNet.Bootstrap` - deployment/bootstrap tool for Azure containers and AI Search index.
+- `infra/search/events-index.schema.json` - source-controlled schema for event search index.
 - `tests/MemNet.MemoryService.SpecTests` - executable specification tests.
 - `TASK_BOARD.md` - implementation progress and backlog.
 - `AGENTS.md` - development guardrails and first-principles rules.

@@ -45,6 +45,8 @@ internal sealed partial class SpecRunner
         AddTest(nameof(HttpDocumentPatchFlowWorksEndToEndAsync), HttpDocumentPatchFlowWorksEndToEndAsync);
         AddTest(nameof(HttpContextAssembleReturnsDefaultDocsAsync), HttpContextAssembleReturnsDefaultDocsAsync);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);
+        AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
+        AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
 
 #if !MEMNET_ENABLE_AZURE_SDK
         AddTest(nameof(AzureProviderDisabledReturns501Async), AzureProviderDisabledReturns501Async);
