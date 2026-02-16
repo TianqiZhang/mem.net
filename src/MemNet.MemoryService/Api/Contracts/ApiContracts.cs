@@ -5,7 +5,13 @@ namespace MemNet.MemoryService.Core;
 public sealed record PatchDocumentRequest(
     IReadOnlyList<PatchOperation> Ops,
     string Reason,
-    EvidenceRef? Evidence);
+    EvidenceRef? Evidence,
+    IReadOnlyList<TextPatchEdit>? Edits = null);
+
+public sealed record TextPatchEdit(
+    string OldText,
+    string NewText,
+    int? Occurrence);
 
 public sealed record ReplaceDocumentRequest(
     DocumentEnvelope Document,

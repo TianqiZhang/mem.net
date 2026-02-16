@@ -41,8 +41,14 @@ public sealed class MemoryCoordinator(
         logger.LogInformation("Patching document.");
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
-        Guard.True(request.Ops.Count > 0, "INVALID_PATCH", "Patch operations are required.", StatusCodes.Status400BadRequest);
-        Guard.True(request.Ops.Count <= MaxOpsPerPatch, "PATCH_TOO_LARGE", "Patch operation count exceeds limit.", StatusCodes.Status422UnprocessableEntity);
+        var hasTextEdits = request.Edits is { Count: > 0 };
+        var hasPatchOps = request.Ops.Count > 0;
+        Guard.True(hasTextEdits || hasPatchOps, "INVALID_PATCH", "Patch request requires either edits[] or ops[].", StatusCodes.Status400BadRequest);
+        Guard.True(
+            (hasTextEdits ? request.Edits!.Count : request.Ops.Count) <= MaxOpsPerPatch,
+            "PATCH_TOO_LARGE",
+            "Patch operation count exceeds limit.",
+            StatusCodes.Status422UnprocessableEntity);
 
         var existing = await documentStore.GetAsync(key, cancellationToken);
         if (existing is null)
@@ -50,19 +56,10 @@ public sealed class MemoryCoordinator(
             throw new ApiException(StatusCodes.Status404NotFound, "DOCUMENT_NOT_FOUND", "Cannot patch missing document.");
         }
 
-        var rawNode = JsonSerializer.SerializeToNode(existing.Envelope, JsonDefaults.Options) as JsonObject
-            ?? throw new ApiException(StatusCodes.Status500InternalServerError, "SERIALIZATION_ERROR", "Failed to serialize existing envelope.");
-
-        var patchedNode = JsonPatchEngine.Apply(rawNode, request.Ops);
-        var patchedEnvelope = patchedNode.Deserialize<DocumentEnvelope>(JsonDefaults.Options)
-            ?? throw new ApiException(StatusCodes.Status422UnprocessableEntity, "INVALID_DOCUMENT", "Patch produced invalid document structure.");
-
         var now = DateTimeOffset.UtcNow;
-        patchedEnvelope = patchedEnvelope with
-        {
-            UpdatedAt = now,
-            UpdatedBy = actor
-        };
+        var (patchedEnvelope, auditOps) = hasTextEdits
+            ? ApplyTextEdits(existing.Envelope, request.Edits!, now, actor)
+            : ApplyJsonPatch(existing.Envelope, request.Ops, now, actor);
 
         ValidateCoreEnvelope(patchedEnvelope);
 
@@ -78,7 +75,7 @@ public sealed class MemoryCoordinator(
             PreviousETag: ifMatch,
             NewETag: saved.ETag,
             Reason: request.Reason,
-            Ops: request.Ops,
+            Ops: auditOps,
             Timestamp: now,
             EvidenceMessageIds: request.Evidence?.MessageIds), cancellationToken);
 
@@ -224,6 +221,123 @@ public sealed class MemoryCoordinator(
         public void Dispose()
         {
         }
+    }
+
+    private static (DocumentEnvelope Envelope, IReadOnlyList<PatchOperation> AuditOps) ApplyJsonPatch(
+        DocumentEnvelope existing,
+        IReadOnlyList<PatchOperation> ops,
+        DateTimeOffset now,
+        string actor)
+    {
+        var rawNode = JsonSerializer.SerializeToNode(existing, JsonDefaults.Options) as JsonObject
+            ?? throw new ApiException(StatusCodes.Status500InternalServerError, "SERIALIZATION_ERROR", "Failed to serialize existing envelope.");
+
+        var patchedNode = JsonPatchEngine.Apply(rawNode, ops);
+        var patchedEnvelope = patchedNode.Deserialize<DocumentEnvelope>(JsonDefaults.Options)
+            ?? throw new ApiException(StatusCodes.Status422UnprocessableEntity, "INVALID_DOCUMENT", "Patch produced invalid document structure.");
+
+        patchedEnvelope = patchedEnvelope with
+        {
+            UpdatedAt = now,
+            UpdatedBy = actor
+        };
+
+        return (patchedEnvelope, ops);
+    }
+
+    private static (DocumentEnvelope Envelope, IReadOnlyList<PatchOperation> AuditOps) ApplyTextEdits(
+        DocumentEnvelope existing,
+        IReadOnlyList<TextPatchEdit> edits,
+        DateTimeOffset now,
+        string actor)
+    {
+        var content = existing.Content.DeepClone() as JsonObject
+            ?? throw new ApiException(StatusCodes.Status422UnprocessableEntity, "INVALID_DOCUMENT", "Document content must be an object.");
+
+        var text = content["text"]?.GetValue<string>();
+        if (text is null)
+        {
+            throw new ApiException(
+                StatusCodes.Status422UnprocessableEntity,
+                "PATCH_TEXT_NOT_FOUND",
+                "Deterministic text patch requires /content/text string.");
+        }
+
+        foreach (var edit in edits)
+        {
+            Guard.True(!string.IsNullOrEmpty(edit.OldText), "INVALID_TEXT_PATCH", "old_text must not be empty.", StatusCodes.Status400BadRequest);
+            text = ApplySingleTextEdit(text, edit);
+        }
+
+        content["text"] = text;
+        var patchedEnvelope = existing with
+        {
+            Content = content,
+            UpdatedAt = now,
+            UpdatedBy = actor
+        };
+
+        // Keep audit contract stable; detailed edit payload can be reconstructed from evidence and before/after snapshots.
+        return (patchedEnvelope, Array.Empty<PatchOperation>());
+    }
+
+    private static string ApplySingleTextEdit(string content, TextPatchEdit edit)
+    {
+        var matches = FindMatchIndexes(content, edit.OldText);
+        if (matches.Count == 0)
+        {
+            throw new ApiException(
+                StatusCodes.Status422UnprocessableEntity,
+                "PATCH_MATCH_NOT_FOUND",
+                "No matching old_text was found in file content.");
+        }
+
+        int index;
+        if (edit.Occurrence.HasValue)
+        {
+            if (edit.Occurrence.Value <= 0 || edit.Occurrence.Value > matches.Count)
+            {
+                throw new ApiException(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "PATCH_OCCURRENCE_OUT_OF_RANGE",
+                    "occurrence is out of range for old_text matches.");
+            }
+
+            index = matches[edit.Occurrence.Value - 1];
+        }
+        else
+        {
+            if (matches.Count > 1)
+            {
+                throw new ApiException(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "PATCH_MATCH_AMBIGUOUS",
+                    "old_text matched multiple locations; provide occurrence.");
+            }
+
+            index = matches[0];
+        }
+
+        return content.Remove(index, edit.OldText.Length).Insert(index, edit.NewText);
+    }
+
+    private static List<int> FindMatchIndexes(string content, string oldText)
+    {
+        var indexes = new List<int>();
+        var start = 0;
+        while (start <= content.Length - oldText.Length)
+        {
+            var match = content.IndexOf(oldText, start, StringComparison.Ordinal);
+            if (match < 0)
+            {
+                break;
+            }
+
+            indexes.Add(match);
+            start = match + oldText.Length;
+        }
+
+        return indexes;
     }
 
     private static void ValidateCoreEnvelope(DocumentEnvelope envelope)

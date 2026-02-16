@@ -147,7 +147,7 @@
 - [x] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API
 - [x] Remove public `namespace` concept from service contracts/domain models/audit records
 - [x] Change `context:assemble` request/response from `documents[]` to path-only `files[]`
-- [ ] Implement deterministic text patch (`old_text`/`new_text`/`occurrence`) for file API
+- [x] Implement deterministic text patch (`old_text`/`new_text`/`occurrence`) for file API
 - [x] Keep events/search/lifecycle behavior unchanged
 
 ### 17C - SDK Refactor Second
@@ -158,8 +158,8 @@
 
 ### 17D - Test Hardening and Validation
 - [x] Update all existing service+SDK tests to new `/files` + path-only contracts
-- [ ] Add spec tests for text patch success/failure/ambiguous-match paths
-- [ ] Add ETag conflict + retry tests for file patch/write flows
+- [x] Add spec tests for text patch success/failure/ambiguous-match paths
+- [x] Add ETag conflict + retry tests for file patch/write flows
 - [x] Ensure filesystem and azure providers pass shared file-first acceptance scenarios (azure live run env-gated)
 
 ### 17E - Documentation and Cleanup

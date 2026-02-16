@@ -73,6 +73,123 @@ internal sealed partial class SpecRunner
             ex => ex.StatusCode == 422 && ex.Code == "INVALID_PATCH_PATH");
     }
 
+    private static async Task PatchFileTextEditsApplyDeterministicallyAsync()
+    {
+        using var scope = TestScope.Create();
+        var now = DateTimeOffset.UtcNow;
+        var key = new DocumentKey(scope.Keys.Tenant, scope.Keys.User, "user/text_patch.md");
+        var seeded = await scope.DocumentStore.UpsertAsync(
+            key,
+            new DocumentEnvelope(
+                DocId: Guid.NewGuid().ToString("N"),
+                SchemaId: "memnet.file",
+                SchemaVersion: "1.0.0",
+                CreatedAt: now,
+                UpdatedAt: now,
+                UpdatedBy: "seed",
+                Content: new JsonObject
+                {
+                    ["content_type"] = "text/markdown",
+                    ["text"] = "line A\nline A\nline B\n"
+                }),
+            ifMatch: "*");
+
+        var patched = await scope.Coordinator.PatchDocumentAsync(
+            key,
+            new PatchDocumentRequest(
+                Ops: [],
+                Reason: "text_patch",
+                Evidence: null,
+                Edits:
+                [
+                    new TextPatchEdit("line A\n", "line X\n", 2)
+                ]),
+            ifMatch: seeded.ETag,
+            actor: "spec-tests");
+
+        Assert.Equal("line A\nline X\nline B\n", patched.Document.Content["text"]?.GetValue<string>());
+    }
+
+    private static async Task PatchFileTextEditsRejectAmbiguousMatchAsync()
+    {
+        using var scope = TestScope.Create();
+        var now = DateTimeOffset.UtcNow;
+        var key = new DocumentKey(scope.Keys.Tenant, scope.Keys.User, "user/text_patch_ambiguous.md");
+        var seeded = await scope.DocumentStore.UpsertAsync(
+            key,
+            new DocumentEnvelope(
+                DocId: Guid.NewGuid().ToString("N"),
+                SchemaId: "memnet.file",
+                SchemaVersion: "1.0.0",
+                CreatedAt: now,
+                UpdatedAt: now,
+                UpdatedBy: "seed",
+                Content: new JsonObject
+                {
+                    ["content_type"] = "text/markdown",
+                    ["text"] = "alpha\nalpha\n"
+                }),
+            ifMatch: "*");
+
+        await Assert.ThrowsAsync<ApiException>(
+            async () =>
+            {
+                await scope.Coordinator.PatchDocumentAsync(
+                    key,
+                    new PatchDocumentRequest(
+                        Ops: [],
+                        Reason: "text_patch",
+                        Evidence: null,
+                        Edits:
+                        [
+                            new TextPatchEdit("alpha\n", "beta\n", null)
+                        ]),
+                    ifMatch: seeded.ETag,
+                    actor: "spec-tests");
+            },
+            ex => ex.StatusCode == 422 && ex.Code == "PATCH_MATCH_AMBIGUOUS");
+    }
+
+    private static async Task PatchFileTextEditsRejectMissingMatchAsync()
+    {
+        using var scope = TestScope.Create();
+        var now = DateTimeOffset.UtcNow;
+        var key = new DocumentKey(scope.Keys.Tenant, scope.Keys.User, "user/text_patch_missing.md");
+        var seeded = await scope.DocumentStore.UpsertAsync(
+            key,
+            new DocumentEnvelope(
+                DocId: Guid.NewGuid().ToString("N"),
+                SchemaId: "memnet.file",
+                SchemaVersion: "1.0.0",
+                CreatedAt: now,
+                UpdatedAt: now,
+                UpdatedBy: "seed",
+                Content: new JsonObject
+                {
+                    ["content_type"] = "text/markdown",
+                    ["text"] = "alpha\n"
+                }),
+            ifMatch: "*");
+
+        await Assert.ThrowsAsync<ApiException>(
+            async () =>
+            {
+                await scope.Coordinator.PatchDocumentAsync(
+                    key,
+                    new PatchDocumentRequest(
+                        Ops: [],
+                        Reason: "text_patch",
+                        Evidence: null,
+                        Edits:
+                        [
+                            new TextPatchEdit("missing\n", "beta\n", null)
+                        ]),
+                    ifMatch: seeded.ETag,
+                    actor: "spec-tests");
+            },
+            ex => ex.StatusCode == 422 && ex.Code == "PATCH_MATCH_NOT_FOUND");
+    }
+
     private static async Task AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync()
     {
         using var scope = TestScope.Create();

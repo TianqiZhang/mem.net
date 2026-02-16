@@ -207,4 +207,154 @@ internal sealed partial class SpecRunner
         var loaded = await agentMemory.MemoryLoadFileAsync(memScope, path);
         Assert.True(loaded.Content.Contains("line two", StringComparison.Ordinal), "Expected patched markdown content.");
     }
+
+    private static async Task SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
+        using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
+        {
+            BaseAddress = host.BaseAddress,
+            ServiceId = "agent-sdk-tests"
+        });
+
+        var memScope = new MemNet.Client.MemNetScope(scope.Keys.Tenant, scope.Keys.User);
+        var fileRef = new MemNet.Client.FileRef("user/retry-text.md");
+        var now = DateTimeOffset.UtcNow;
+
+        var seededEnvelope = new MemNet.Client.DocumentEnvelope(
+            DocId: Guid.NewGuid().ToString("N"),
+            SchemaId: "memnet.file",
+            SchemaVersion: "1.0.0",
+            CreatedAt: now,
+            UpdatedAt: now,
+            UpdatedBy: "seed",
+            Content: new JsonObject
+            {
+                ["content_type"] = "text/markdown",
+                ["text"] = "start\n"
+            });
+
+        await client.WriteFileAsync(
+            memScope,
+            fileRef,
+            new MemNet.Client.ReplaceDocumentRequest(seededEnvelope, "seed"),
+            ifMatch: "*");
+
+        var injectedConflict = false;
+        var updated = await client.UpdateWithRetryAsync(
+            memScope,
+            fileRef,
+            current =>
+            {
+                if (!injectedConflict)
+                {
+                    injectedConflict = true;
+                    var conflictEnvelope = current.Document with
+                    {
+                        Content = new JsonObject
+                        {
+                            ["content_type"] = "text/markdown",
+                            ["text"] = "middle\n"
+                        }
+                    };
+
+                    client.WriteFileAsync(
+                        memScope,
+                        fileRef,
+                        new MemNet.Client.ReplaceDocumentRequest(conflictEnvelope, "inject_conflict"),
+                        current.ETag).GetAwaiter().GetResult();
+                }
+
+                return MemNet.Client.FileUpdate.FromPatch(
+                    new MemNet.Client.PatchDocumentRequest(
+                        Ops: [],
+                        Reason: "retry_text_patch",
+                        Evidence: null,
+                        Edits:
+                        [
+                            new MemNet.Client.TextPatchEdit("middle\n", "final\n")
+                        ]));
+            },
+            maxConflictRetries: 3);
+
+        Assert.True(injectedConflict, "Expected conflict injection to execute.");
+        Assert.Equal("final\n", updated.Document.Content["text"]?.GetValue<string>());
+    }
+
+    private static async Task SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
+        using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
+        {
+            BaseAddress = host.BaseAddress,
+            ServiceId = "agent-sdk-tests"
+        });
+
+        var memScope = new MemNet.Client.MemNetScope(scope.Keys.Tenant, scope.Keys.User);
+        var fileRef = new MemNet.Client.FileRef("user/retry-write.md");
+        var now = DateTimeOffset.UtcNow;
+
+        var seededEnvelope = new MemNet.Client.DocumentEnvelope(
+            DocId: Guid.NewGuid().ToString("N"),
+            SchemaId: "memnet.file",
+            SchemaVersion: "1.0.0",
+            CreatedAt: now,
+            UpdatedAt: now,
+            UpdatedBy: "seed",
+            Content: new JsonObject
+            {
+                ["content_type"] = "text/markdown",
+                ["text"] = "v0\n"
+            });
+
+        await client.WriteFileAsync(
+            memScope,
+            fileRef,
+            new MemNet.Client.ReplaceDocumentRequest(seededEnvelope, "seed"),
+            ifMatch: "*");
+
+        var injectedConflict = false;
+        var updated = await client.UpdateWithRetryAsync(
+            memScope,
+            fileRef,
+            current =>
+            {
+                if (!injectedConflict)
+                {
+                    injectedConflict = true;
+                    var conflictEnvelope = current.Document with
+                    {
+                        Content = new JsonObject
+                        {
+                            ["content_type"] = "text/markdown",
+                            ["text"] = "v1\n"
+                        }
+                    };
+
+                    client.WriteFileAsync(
+                        memScope,
+                        fileRef,
+                        new MemNet.Client.ReplaceDocumentRequest(conflictEnvelope, "inject_conflict"),
+                        current.ETag).GetAwaiter().GetResult();
+                }
+
+                var target = current.Document with
+                {
+                    Content = new JsonObject
+                    {
+                        ["content_type"] = "text/markdown",
+                        ["text"] = "v-final\n"
+                    }
+                };
+
+                return MemNet.Client.FileUpdate.FromWrite(
+                    new MemNet.Client.ReplaceDocumentRequest(target, "retry_write"));
+            },
+            maxConflictRetries: 3);
+
+        Assert.True(injectedConflict, "Expected conflict injection to execute.");
+        Assert.Equal("v-final\n", updated.Document.Content["text"]?.GetValue<string>());
+    }
 }

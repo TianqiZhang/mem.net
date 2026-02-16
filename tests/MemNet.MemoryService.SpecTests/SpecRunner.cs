@@ -39,6 +39,9 @@ internal sealed partial class SpecRunner
         AddTest(nameof(PatchDocumentHappyPathAsync), PatchDocumentHappyPathAsync);
         AddTest(nameof(PatchDocumentReturns412OnEtagMismatchAsync), PatchDocumentReturns412OnEtagMismatchAsync);
         AddTest(nameof(PatchDocumentReturns422OnInvalidPatchPathAsync), PatchDocumentReturns422OnInvalidPatchPathAsync);
+        AddTest(nameof(PatchFileTextEditsApplyDeterministicallyAsync), PatchFileTextEditsApplyDeterministicallyAsync);
+        AddTest(nameof(PatchFileTextEditsRejectAmbiguousMatchAsync), PatchFileTextEditsRejectAmbiguousMatchAsync);
+        AddTest(nameof(PatchFileTextEditsRejectMissingMatchAsync), PatchFileTextEditsRejectMissingMatchAsync);
         AddTest(nameof(AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync), AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync);
         AddTest(nameof(AssembleContextRejectsEmptyRequestAsync), AssembleContextRejectsEmptyRequestAsync);
         AddTest(nameof(EventSearchReturnsRelevantResultsAsync), EventSearchReturnsRelevantResultsAsync);
@@ -55,6 +58,8 @@ internal sealed partial class SpecRunner
         AddTest(nameof(AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync), AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync);
         AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsAsync), SdkUpdateWithRetryResolvesEtagConflictsAsync);
         AddTest(nameof(AgentMemoryFileToolFlowWorksAsync), AgentMemoryFileToolFlowWorksAsync);
+        AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync), SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync);
+        AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync), SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync);
         AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
         AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
 

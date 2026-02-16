@@ -232,17 +232,16 @@ public sealed class AgentMemory
         GuardPatchEdits(edits);
 
         var fileRef = new MemNet.Client.FileRef(path);
+        var mappedEdits = edits.Select(x => new MemNet.Client.TextPatchEdit(x.OldText, x.NewText, x.Occurrence)).ToArray();
         var updated = await _client.UpdateWithRetryAsync(
             scope,
             fileRef,
-            current =>
-            {
-                var extracted = ExtractFileContent(current.Document);
-                var nextContent = ApplyDeterministicTextEdits(extracted.Content, edits);
-                var nextEnvelope = BuildFileEnvelope(current.Document, extracted.ContentType, nextContent);
-                return MemNet.Client.FileUpdate.FromWrite(
-                    new MemNet.Client.ReplaceDocumentRequest(nextEnvelope, reason));
-            },
+            _ => MemNet.Client.FileUpdate.FromPatch(
+                new MemNet.Client.PatchDocumentRequest(
+                    Ops: Array.Empty<MemNet.Client.PatchOperation>(),
+                    Reason: reason,
+                    Evidence: null,
+                    Edits: mappedEdits)),
             serviceId: serviceId,
             maxConflictRetries: maxConflictRetries,
             cancellationToken: cancellationToken);
@@ -313,62 +312,6 @@ public sealed class AgentMemory
         {
             throw new MemNet.Client.MemNetException("memory_patch_file edit old_text must not be empty.");
         }
-    }
-
-    private static string ApplyDeterministicTextEdits(string input, IReadOnlyList<MemoryPatchEdit> edits)
-    {
-        var output = input;
-        foreach (var edit in edits)
-        {
-            var matches = FindMatchIndexes(output, edit.OldText);
-            if (matches.Count == 0)
-            {
-                throw new MemNet.Client.MemNetException("memory_patch_file failed: old_text not found.");
-            }
-
-            int matchIndex;
-            if (edit.Occurrence.HasValue)
-            {
-                if (edit.Occurrence.Value <= 0 || edit.Occurrence.Value > matches.Count)
-                {
-                    throw new MemNet.Client.MemNetException("memory_patch_file failed: occurrence is out of range.");
-                }
-
-                matchIndex = matches[edit.Occurrence.Value - 1];
-            }
-            else
-            {
-                if (matches.Count > 1)
-                {
-                    throw new MemNet.Client.MemNetException("memory_patch_file failed: old_text is ambiguous; provide occurrence.");
-                }
-
-                matchIndex = matches[0];
-            }
-
-            output = output.Remove(matchIndex, edit.OldText.Length).Insert(matchIndex, edit.NewText);
-        }
-
-        return output;
-    }
-
-    private static List<int> FindMatchIndexes(string content, string needle)
-    {
-        var indexes = new List<int>();
-        var start = 0;
-        while (start <= content.Length - needle.Length)
-        {
-            var index = content.IndexOf(needle, start, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                break;
-            }
-
-            indexes.Add(index);
-            start = index + needle.Length;
-        }
-
-        return indexes;
     }
 
     private (MemorySlotPolicy Slot, MemNet.Client.FileRef File) ResolveSlot(

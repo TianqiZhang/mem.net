@@ -87,6 +87,7 @@ No low-level method requires `policy_id` or `binding_id`.
 Phase 17 status:
 - service and SDK now use path-only `/files/{**path}` semantics
 - namespace-based SDK references are removed from public surface
+- canonical file patch payload uses deterministic text `edits[]` (`old_text`, `new_text`, optional `occurrence`)
 
 ### 6.4 Response Shapes
 - file operations: `ETag` + `DocumentEnvelope`

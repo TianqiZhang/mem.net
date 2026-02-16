@@ -21,6 +21,11 @@ public sealed record DocumentEnvelope(
 
 public sealed record PatchOperation(string Op, string Path, JsonNode? Value);
 
+public sealed record TextPatchEdit(
+    string OldText,
+    string NewText,
+    int? Occurrence = null);
+
 public sealed record EvidenceRef(
     string? ConversationId,
     IReadOnlyList<string>? MessageIds,
@@ -29,7 +34,8 @@ public sealed record EvidenceRef(
 public sealed record PatchDocumentRequest(
     IReadOnlyList<PatchOperation> Ops,
     string Reason,
-    EvidenceRef? Evidence = null);
+    EvidenceRef? Evidence = null,
+    IReadOnlyList<TextPatchEdit>? Edits = null);
 
 public sealed record ReplaceDocumentRequest(
     DocumentEnvelope Document,

@@ -119,10 +119,14 @@ Headers:
 Request body:
 ```json
 {
-  "ops": [
-    { "op": "replace", "path": "/content/preferences/0", "value": "Use concise answers." }
+  "edits": [
+    {
+      "old_text": "## Preferences\n- concise answers\n",
+      "new_text": "## Preferences\n- concise answers\n- include tradeoffs first\n",
+      "occurrence": 1
+    }
   ],
-  "reason": "live_update",
+  "reason": "preference_update",
   "evidence": {
     "conversation_id": "c_123",
     "message_ids": ["m1"],
@@ -214,9 +218,10 @@ The public `namespace` selector has been removed from the API surface.
 ## 8. Validation Rules (Runtime)
 For file mutations, service enforces:
 - `If-Match` optimistic concurrency.
-- max patch operation count (`100`).
-- request/body structural validity.
-- envelope payload sanity and bounded size limits.
+- max patch edit count (`100`).
+- deterministic text edit matching (`old_text`, `new_text`, optional `occurrence`).
+- explicit `422` errors for `PATCH_MATCH_NOT_FOUND`, `PATCH_MATCH_AMBIGUOUS`, `PATCH_OCCURRENCE_OUT_OF_RANGE`.
+- request/body structural validity and envelope payload size limits.
 
 For events, service enforces required API contract fields.
 
