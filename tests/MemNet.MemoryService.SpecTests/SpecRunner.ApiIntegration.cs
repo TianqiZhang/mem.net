@@ -7,7 +7,7 @@ internal sealed partial class SpecRunner
     private static async Task HttpDocumentPatchFlowWorksEndToEndAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
@@ -23,8 +23,6 @@ internal sealed partial class SpecRunner
         {
             Content = JsonContent.Create(new
             {
-                policy_id = "project-copilot-v1",
-                binding_id = "long_term_memory",
                 ops = new[]
                 {
                     new { op = "replace", path = "/content/preferences/0", value = "HTTP patch updated preference." }
@@ -49,8 +47,6 @@ internal sealed partial class SpecRunner
         {
             Content = JsonContent.Create(new
             {
-                policy_id = "project-copilot-v1",
-                binding_id = "long_term_memory",
                 ops = new[]
                 {
                     new { op = "replace", path = "/content/preferences/0", value = "stale write" }
@@ -65,10 +61,10 @@ internal sealed partial class SpecRunner
         Assert.Equal(HttpStatusCode.PreconditionFailed, staleResponse.StatusCode);
     }
 
-    private static async Task HttpDocumentPatchV2FlowWorksEndToEndAsync()
+    private static async Task HttpDocumentPatchAddOperationWorksEndToEndAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
@@ -86,10 +82,10 @@ internal sealed partial class SpecRunner
             {
                 ops = new[]
                 {
-                    new { op = "add", path = "/content/freeform_note", value = "HTTP V2 patch update." }
+                    new { op = "add", path = "/content/freeform_note", value = "HTTP patch add operation update." }
                 },
                 reason = "live_update",
-                evidence = new { conversation_id = "c-http-v2", message_ids = new[] { "m1" }, snapshot_uri = (string?)null }
+                evidence = new { conversation_id = "c-http-add", message_ids = new[] { "m1" }, snapshot_uri = (string?)null }
             })
         };
         patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
@@ -101,35 +97,13 @@ internal sealed partial class SpecRunner
         var patchBody = JsonNode.Parse(await patchResponse.Content.ReadAsStringAsync())?.AsObject()
             ?? throw new Exception("Expected patch response payload.");
         var note = patchBody["document"]?["content"]?["freeform_note"]?.GetValue<string>();
-        Assert.Equal("HTTP V2 patch update.", note);
+        Assert.Equal("HTTP patch add operation update.", note);
     }
 
     private static async Task HttpContextAssembleReturnsDefaultDocsAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
-        using var client = CreateHttpClient(host.BaseAddress);
-
-        var contextResponse = await client.PostAsJsonAsync(
-            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
-            new
-            {
-                policy_id = "project-copilot-v1",
-                max_docs = 4,
-                max_chars_total = 30000
-            });
-
-        Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
-        var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
-            ?? throw new Exception("Expected context response.");
-        var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
-        Assert.Equal(2, contextDocs.Count);
-    }
-
-    private static async Task HttpContextAssembleWithExplicitDocumentsV2Async()
-    {
-        using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var contextResponse = await client.PostAsJsonAsync(
@@ -151,14 +125,43 @@ internal sealed partial class SpecRunner
         var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
         Assert.Equal(2, contextDocs.Count);
 
-        var droppedBindings = contextBody["dropped_bindings"] as JsonArray ?? throw new Exception("Expected dropped_bindings array.");
-        Assert.Equal(0, droppedBindings.Count);
+        var droppedDocs = contextBody["dropped_documents"] as JsonArray ?? throw new Exception("Expected dropped_documents array.");
+        Assert.Equal(0, droppedDocs.Count);
+    }
+
+    private static async Task HttpContextAssembleWithExplicitDocumentsWorksAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
+        using var client = CreateHttpClient(host.BaseAddress);
+
+        var contextResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
+            new
+            {
+                documents = new[]
+                {
+                    new { @namespace = "user", path = "profile.json" },
+                    new { @namespace = "user", path = "long_term_memory.json" }
+                },
+                max_docs = 4,
+                max_chars_total = 30000
+            });
+
+        Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
+        var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected context response.");
+        var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
+        Assert.Equal(2, contextDocs.Count);
+
+        var droppedDocs = contextBody["dropped_documents"] as JsonArray ?? throw new Exception("Expected dropped_documents array.");
+        Assert.Equal(0, droppedDocs.Count);
     }
 
     private static async Task HttpEventsWriteAndSearchFlowWorksAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var now = DateTimeOffset.UtcNow;
@@ -212,7 +215,6 @@ internal sealed partial class SpecRunner
         using var host = await ServiceHost.StartAsync(
             scope.RepoRoot,
             scope.DataRoot,
-            scope.ConfigRoot,
             provider: "azure");
 
         using var client = CreateHttpClient(host.BaseAddress);
@@ -230,7 +232,7 @@ internal sealed partial class SpecRunner
     private static async Task RetentionSweepRemovesExpiredEventsAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var oldTimestamp = DateTimeOffset.UtcNow.AddDays(-420);
@@ -279,7 +281,13 @@ internal sealed partial class SpecRunner
 
         var retentionResponse = await client.PostAsJsonAsync(
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
-            new { policy_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
+            new
+            {
+                events_days = 365,
+                audit_days = 365,
+                snapshots_days = 60,
+                as_of_utc = (DateTimeOffset?)null
+            });
         Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
 
         var retentionBody = JsonNode.Parse(await retentionResponse.Content.ReadAsStringAsync())?.AsObject()
@@ -303,10 +311,10 @@ internal sealed partial class SpecRunner
         Assert.True(eventIds.Contains("evt-retention-fresh"), "Fresh event should remain after retention sweep.");
     }
 
-    private static async Task RetentionSweepV2RequestShapeWorksAsync()
+    private static async Task RetentionSweepRequestShapeWorksAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var oldTimestamp = DateTimeOffset.UtcNow.AddDays(-420);
@@ -316,17 +324,17 @@ internal sealed partial class SpecRunner
             {
                 @event = new
                 {
-                    event_id = "evt-retention-v2-old",
+                    event_id = "evt-retention-shape-old",
                     tenant_id = scope.Keys.Tenant,
                     user_id = scope.Keys.User,
                     service_id = "retention-tests",
                     timestamp = oldTimestamp,
                     source_type = "chat",
-                    digest = "Old event v2 retention",
+                    digest = "Old event retention request-shape test",
                     keywords = new[] { "old" },
                     project_ids = new[] { "project-alpha" },
-                    snapshot_uri = "blob://snapshots/old-v2",
-                    evidence = new { message_ids = new[] { "m-old-v2" }, start = 1, end = 1 }
+                    snapshot_uri = "blob://snapshots/old-shape",
+                    evidence = new { message_ids = new[] { "m-old-shape" }, start = 1, end = 1 }
                 }
             });
         Assert.Equal(HttpStatusCode.Accepted, writeEventResponse.StatusCode);
@@ -355,13 +363,13 @@ internal sealed partial class SpecRunner
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToHashSet(StringComparer.Ordinal);
 
-        Assert.True(!eventIds.Contains("evt-retention-v2-old"), "Expired event should have been removed by v2 retention request.");
+        Assert.True(!eventIds.Contains("evt-retention-shape-old"), "Expired event should have been removed by retention request.");
     }
 
     private static async Task ForgetUserRemovesDocumentsAndEventsAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
         var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
@@ -376,8 +384,6 @@ internal sealed partial class SpecRunner
         {
             Content = JsonContent.Create(new
             {
-                policy_id = "project-copilot-v1",
-                binding_id = "long_term_memory",
                 ops = new[] { new { op = "replace", path = "/content/preferences/0", value = "forget flow test" } },
                 reason = "live_update"
             })

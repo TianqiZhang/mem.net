@@ -1,7 +1,7 @@
 # mem.net SDK Technical Specification
 
 Project: `mem.net` SDK  
-Status: Active v1 implementation  
+Status: Active pre-release implementation  
 Last Updated: February 16, 2026
 
 ## 1. Purpose
@@ -19,9 +19,8 @@ Service (`mem.net`) owns:
 - lifecycle cleanup
 
 SDK owns:
-- policy config loading
-- slot/binding resolution (`slot -> namespace/path`)
-- schema/path guardrails for app documents
+- LLM-facing memory tool contract
+- optional policy/slot config for application semantics
 - deterministic agent-facing context composition strategy
 
 ## 3. First-Principles Fit
@@ -43,8 +42,8 @@ Two NuGet packages:
 
 2. `MemNet.AgentMemory`
 - high-level agent-oriented API
-- policy-driven slot model and validation
-- context preparation (`load docs + search events`)
+- file-like memory tools for LLM harnesses
+- optional slot/policy layer for app-owned memory conventions
 
 Optional future package:
 - `MemNet.Testing`
@@ -85,6 +84,10 @@ All methods accept `CancellationToken`.
 
 No low-level method requires `policy_id` or `binding_id`.
 
+Phase 17 target additions:
+- `GetFileAsync(...)` / `WriteFileAsync(...)` / `PatchFileAsync(...)` aligned to `/files/{**path}`
+- `/documents` methods are current baseline until file APIs land
+
 ### 6.4 Response Shapes
 - document operations: `ETag` + `DocumentEnvelope`
 - lifecycle operations: `ForgetUserResult`, `RetentionSweepResult`
@@ -123,65 +126,44 @@ Behavior:
 Default max conflict retries: `3`.
 
 ## 9. High-Level API (`MemNet.AgentMemory`)
-### 9.1 Policy Model (SDK-Owned)
-Example config file (`agent-memory-policy.json`):
-```json
-{
-  "policy_id": "learn-companion-default",
-  "slots": [
-    {
-      "slot_id": "profile",
-      "namespace": "user",
-      "path": "profile.json",
-      "load_by_default": true,
-      "patch_rules": {
-        "allowed_paths": ["/content/profile", "/content/projects"],
-        "required_content_paths": ["/profile"]
-      }
-    },
-    {
-      "slot_id": "long_term_memory",
-      "namespace": "user",
-      "path": "long_term_memory.json",
-      "load_by_default": true
-    },
-    {
-      "slot_id": "project",
-      "namespace": "projects",
-      "path_template": "{project_id}.json",
-      "load_by_default": false
-    }
-  ]
-}
-```
+### 9.1 Official LLM Tool Contract
+The official harness-facing contract is file-like and intentionally minimal:
 
-### 9.2 Primary Interface
-`AgentMemory` exposes:
-- `PrepareTurnAsync(...)`
-- `LoadSlotAsync(...)`
-- `PatchSlotAsync(...)`
-- `ReplaceSlotAsync(...)`
-- `RememberAsync(...)` (event write)
-- `RecallAsync(...)` (event search)
-- `ForgetUserAsync(...)`
+1. `memory_recall(query, top_k)`
+2. `memory_load_file(path)`
+3. `memory_patch_file(path, edits)`
+4. `memory_write_file(path, content)`
 
-### 9.3 PrepareTurn Semantics
-`PrepareTurnAsync` does:
-1. resolve default-load slots from SDK policy
-2. load those docs (via `context:assemble` or batched `GET`)
-3. execute `events:search` using caller-provided query/filter
-4. return deterministic `PreparedMemory`
+Recommended defaults:
+- LLM-facing files use markdown (`.md`) where possible.
+- machine/index records remain JSON where required (event contract).
 
-No server-side policy assumptions are required.
+### 9.2 File Tool Semantics
+`memory_load_file(path)`:
+- returns file content plus metadata (`path`, `content_type`, `etag`).
+
+`memory_write_file(path, content)`:
+- full file replacement
+- SDK/harness manages `If-Match` and retries internally.
+
+`memory_patch_file(path, edits)`:
+- deterministic text edits (`old_text`, `new_text`, optional `occurrence`)
+- all edits apply or none apply
+- SDK maps failures to explicit actionable errors (`not_found`, `ambiguous_match`, `etag_conflict`).
+
+`memory_recall(query, top_k)`:
+- wraps event search with deterministic result shaping.
+
+### 9.3 Optional Policy Layer
+Slot/policy APIs may remain as app-facing helpers, but are not the primary LLM-facing contract.
 
 ## 10. Validation Strategy (SDK-Owned)
-By default, high-level SDK validates before mutation:
-- slot exists and resolves to concrete doc path
-- patch path allowlist
-- required content paths
-- optional content/array limits
+Primary validation target is deterministic file editing:
+- patch edit structural validation
+- deterministic `old_text` matching with optional occurrence
+- bounded edit count and payload limits
 
-Validation can be configured strict/lenient, but default is strict for safety.
+Optional slot/policy validation remains available only for policy-layer APIs.
 
 ## 11. Retries and Resilience
 Default retry for idempotent calls:
@@ -199,20 +181,12 @@ Mutations:
 - expose request lifecycle hooks
 - optional OTel integration in later phase
 
-## 13. Versioning and Compatibility
+## 13. Versioning
 - SemVer for SDK packages
 - SDK v1 targets service v2 contract
-- optional temporary compatibility adapter for service v1 may exist during migration
+- pre-release period allows breaking changes before first stable release
 
-## 14. Service/SDK Compatibility Matrix
-| Service Shape | MemNet.Client | MemNet.AgentMemory |
-|---|---|---|
-| v1 (policy/binding in API) | optional compatibility adapter | supported through adapter only |
-| v2 (policy-free API) | native | native |
-
-Target steady state: v2 native only.
-
-## 15. Rollout Plan
+## 14. Rollout Plan
 ### Phase A
 - finalize specs and package skeleton
 
@@ -227,18 +201,17 @@ Target steady state: v2 native only.
 
 ### Phase D
 - docs/samples for practical agent use case
-- migration notes from v1 contract
 
-## 16. Acceptance Criteria (SDK v1)
+## 15. Acceptance Criteria (SDK v1)
 1. Low-level client covers all v2 endpoints.
 2. No low-level API requires policy/binding concepts.
-3. High-level API supports policy-driven slot model for agents.
+3. High-level API exposes official 4-tool file-like contract for agent harnesses.
 4. Typed exceptions include service `code` and `request_id`.
 5. Concurrency helper is deterministic and bounded.
 6. Tests run offline against local harness.
 
-## 17. Implementation Status
+## 16. Implementation Status
 Current implementation includes:
 - `src/MemNet.Client` low-level endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
-- `src/MemNet.AgentMemory` high-level policy/slot facade for agent integration.
+- `src/MemNet.AgentMemory` high-level policy/slot facade.
 - executable SDK contract coverage in `tests/MemNet.MemoryService.SpecTests`.

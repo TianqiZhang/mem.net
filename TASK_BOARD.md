@@ -12,8 +12,8 @@
 
 ## Phase 1 - Core Domain and Config
 - [x] Define domain contracts (documents, envelopes, events, replay patches)
-- [x] Implement policy loader (`policy.json`)
-- [x] Implement validation engine (binding allowlist + required paths + size limits)
+- [x] Implement policy loader (`policy.json`) (initial design, later removed in Phase 16.5)
+- [x] Implement validation engine (binding allowlist + required paths + size limits) (initial design, later simplified)
 - [x] Implement ETag-based optimistic concurrency core services
 
 ## Phase 2 - Storage and Search Providers
@@ -54,7 +54,7 @@
 
 ## Phase 7 - Hardening and Providers
 - [x] Add HTTP-level integration tests (real service process)
-- [x] Add runtime configuration overrides for data/config roots
+- [x] Add runtime configuration overrides for data root and provider mode
 - [x] Add provider selection wiring (`filesystem` / `azure`)
 - [x] Add Azure provider scaffolding behind store interfaces
 
@@ -84,8 +84,8 @@
 - [x] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps
 
 ## Phase 11 - First-Principles Simplification
-- [x] Collapse runtime config to a single policy model (`policy.json`)
-- [x] Move write/read validation constraints to binding-level policy fields
+- [x] Collapse runtime config to a single policy model (`policy.json`) (later removed in Phase 16.5)
+- [x] Move write/read validation constraints to binding-level policy fields (later removed in Phase 16.5)
 - [x] Remove runtime schema registry and policy interfaces
 - [x] Remove request-time confidence gates from core mutation path
 - [x] Defer compaction from runtime core to future background work
@@ -95,9 +95,9 @@
 - [x] Introduce `IMemoryBackend` abstraction and backend factory to simplify provider wiring
 
 ## Phase 12 - Structure Alignment
-- [x] Reorganize source tree to match mental model (`Api`, `Application`, `Domain`, `Policy`, `Backends`)
-- [x] Move default policy file to `src/MemNet.MemoryService/Policy/policy.json`
-- [x] Update runtime default config root and test harness paths for policy location
+- [x] Reorganize source tree to match mental model (`Api`, `Application`, `Domain`, `Policy`, `Backends`) (later simplified)
+- [x] Move default policy file to `src/MemNet.MemoryService/Policy/policy.json` (later removed in Phase 16.5)
+- [x] Update runtime default config root and test harness paths for policy location (later removed in Phase 16.5)
 
 ## Phase 13 - Azure Bootstrap and Initialization
 - [x] Add `tools/MemNet.Bootstrap` CLI for deployment-time initialization
@@ -110,15 +110,15 @@
 ## Phase 14 - v2 Boundary Lock (Service/SDK)
 - [x] Redefine `MEMORY_SERVICE_SPEC.md` to policy-free v2 target boundary
 - [x] Redefine `SDK_SPEC.md` so policy/binding/slot validation is SDK-owned
-- [x] Add explicit v1 -> v2 compatibility mapping in both specs
+- [x] Define pre-release breaking-change policy (no compatibility commitments)
 
 ## Phase 15 - Service v2 Migration
 - [x] Refactor runtime checks into service-core guards vs policy-dependent checks
 - [x] Add v2 request contracts without `policy_id`/`binding_id`
-- [x] Keep v1 request compatibility during migration window
+- [x] Remove compatibility request-shape handling from service contracts
 - [x] Migrate `context:assemble` to explicit document refs
 - [x] Migrate `retention:apply` to explicit retention settings
-- [x] Update spec tests to cover both v1 compatibility and v2 native behavior
+- [x] Update spec tests to validate single canonical request shapes
 
 ## Phase 16 - SDK Delivery
 - [x] Create solution project for `MemNet.Client`
@@ -128,6 +128,44 @@
 - [x] Implement high-level `AgentMemory` facade (`PrepareTurnAsync`, `RecallAsync`, `RememberAsync`)
 - [x] Add SDK contract tests against local service harness
 - [x] Add SDK quickstart samples to `README.md`
+
+## Phase 16.5 - Compatibility Removal Cleanup
+- [x] Remove server-side policy registry/runtime modules from runtime codepath
+- [x] Remove `MEMNET_CONFIG_ROOT` / `ConfigRoot` plumbing from service + test harness
+- [x] Remove compatibility-era contract fields from service/client models
+- [x] Normalize spec test names/assertions to single canonical API shapes
+- [x] Re-align README/spec documents to pre-release no-compatibility stance
+
+## Phase 17 - File-First Agent Memory (Markdown-Oriented)
+### 17A - Contract Lock
+- [x] Define official LLM memory tool contract (`memory_recall`, `memory_load_file`, `memory_patch_file`, `memory_write_file`)
+- [x] Define deterministic text patch request shape (`old_text`, `new_text`, `occurrence`) and error model
+- [x] Decide native route shape (`/documents` with file payload vs dedicated `/files` routes) and document in specs
+- [x] Update `MEMORY_SERVICE_SPEC.md` and `SDK_SPEC.md` with authoritative file-first contracts and pre-release boundary
+
+### 17B - Service Native File Runtime
+- [ ] Introduce native file payload model (`content` text + `content_type`) while preserving ETag/audit semantics
+- [ ] Implement text patch engine for file content (all-or-nothing deterministic matching)
+- [x] Remove policy/binding runtime checks from service baseline
+- [ ] Keep events/search/lifecycle behavior unchanged under file-first mode
+
+### 17C - SDK Tooling Alignment
+- [ ] Add low-level file-centric APIs in `MemNet.Client` (load/patch/write file + recall)
+- [ ] Add high-level 4-tool facade in `MemNet.AgentMemory` matching LLM tool contract exactly
+- [ ] Ensure SDK hides policy/etag internals from LLM-facing harness interfaces
+- [ ] Keep optional slot/policy helper APIs app-facing while file tools are primary
+
+### 17D - Test Hardening and Migration Safety
+- [ ] Add spec tests for text patch success/failure/ambiguous-match paths
+- [ ] Add ETag conflict + retry tests for file patch/write flows
+- [ ] Keep tests focused on single canonical contracts (no dual-shape compatibility paths)
+- [ ] Ensure filesystem and azure providers pass shared file-first acceptance scenarios (azure live run env-gated)
+
+### 17E - Documentation and Deletion Plan
+- [ ] Add migration guide from slot/policy-oriented SDK usage to file-like memory tools
+- [x] Remove policy runtime module and compatibility-field references from service/docs
+- [ ] Update README examples to use markdown-first files and 4-tool contract only
+- [ ] Close Phase 17 only after full build + spec tests pass and docs/specs are in sync
 
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)

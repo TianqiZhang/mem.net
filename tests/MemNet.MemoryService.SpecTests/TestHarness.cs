@@ -64,19 +64,16 @@ internal sealed class TestScope : IDisposable
 {
     private readonly string _repoRoot;
     private readonly string _dataRoot;
-    private readonly string _configRoot;
 
     public TestScope(
         string repoRoot,
         string dataRoot,
-        string configRoot,
         IDocumentStore documentStore,
         MemoryCoordinator coordinator,
         TestKeys keys)
     {
         _repoRoot = repoRoot;
         _dataRoot = dataRoot;
-        _configRoot = configRoot;
         DocumentStore = documentStore;
         Coordinator = coordinator;
         Keys = keys;
@@ -92,50 +89,37 @@ internal sealed class TestScope : IDisposable
 
     public string DataRoot => _dataRoot;
 
-    public string ConfigRoot => _configRoot;
-
     public static TestScope Create()
     {
         var repoRoot = Directory.GetCurrentDirectory();
-        var configRoot = Path.Combine(repoRoot, "src", "MemNet.MemoryService", "Policy");
-        if (!Directory.Exists(configRoot))
-        {
-            throw new Exception($"Config directory not found: {configRoot}");
-        }
-
         var dataRoot = Path.Combine(Path.GetTempPath(), "memnet-spec-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dataRoot);
 
         var options = new StorageOptions
         {
-            DataRoot = dataRoot,
-            ConfigRoot = configRoot
+            DataRoot = dataRoot
         };
 
         var documentStore = new FileDocumentStore(options);
         var eventStore = new FileEventStore(options);
         var auditStore = new FileAuditStore(options);
-        var policy = new PolicyRegistry(options);
-        var policyRules = new PolicyRuntimeRules(policy);
         var coordinator = new MemoryCoordinator(
             documentStore,
             eventStore,
             auditStore,
-            policyRules,
             NullLogger<MemoryCoordinator>.Instance);
 
         var keys = new TestKeys("tenant-1", "user-1");
         SeedDocuments(documentStore, keys).GetAwaiter().GetResult();
 
-        return new TestScope(repoRoot, dataRoot, configRoot, documentStore, coordinator, keys);
+        return new TestScope(repoRoot, dataRoot, documentStore, coordinator, keys);
     }
 
     public StorageOptions CreateStorageOptions()
     {
         return new StorageOptions
         {
-            DataRoot = _dataRoot,
-            ConfigRoot = _configRoot
+            DataRoot = _dataRoot
         };
     }
 
@@ -235,7 +219,6 @@ internal sealed class ServiceHost : IDisposable
     public static async Task<ServiceHost> StartAsync(
         string repoRoot,
         string dataRoot,
-        string configRoot,
         string provider = "filesystem",
         IReadOnlyDictionary<string, string?>? additionalEnvironment = null,
         string? serviceDllPath = null)
@@ -272,7 +255,6 @@ internal sealed class ServiceHost : IDisposable
         startInfo.Environment["ASPNETCORE_URLS"] = baseAddressForHosting;
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         startInfo.Environment["MEMNET_DATA_ROOT"] = dataRoot;
-        startInfo.Environment["MEMNET_CONFIG_ROOT"] = configRoot;
         startInfo.Environment["MEMNET_PROVIDER"] = provider;
 
         if (additionalEnvironment is not null)

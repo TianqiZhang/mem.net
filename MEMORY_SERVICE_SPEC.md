@@ -1,7 +1,7 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Active v2 (with v1 compatibility window)  
+Status: Active v2 baseline, file-first contract planned for Phase 17  
 Version: 2.0 (target)  
 Last Updated: February 16, 2026
 
@@ -203,12 +203,69 @@ Request body:
 ### 7.9 Forget User
 `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
 
+### 7.10 Native File API (Phase 17 Target)
+To align with agent file-like memory tools, the canonical native contract is a file API family:
+
+- `GET /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
+- `PUT /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
+- `PATCH /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
+
+Route decision:
+- Native file-first semantics use `/files`.
+- Existing `/documents/{namespace}/{path}` remains current baseline API until `/files` is implemented.
+
+File read response shape:
+```json
+{
+  "etag": "\"...\"",
+  "file": {
+    "path": "/long_term_memory.md",
+    "content_type": "text/markdown",
+    "content": "## Preferences\n- concise answers\n"
+  }
+}
+```
+
+File write request shape:
+```json
+{
+  "content_type": "text/markdown",
+  "content": "## Preferences\n- concise answers\n",
+  "reason": "manual_update"
+}
+```
+
+File patch request shape (deterministic text patch):
+```json
+{
+  "edits": [
+    {
+      "old_text": "## Preferences\n- concise answers\n",
+      "new_text": "## Preferences\n- concise answers\n- include tradeoffs first\n",
+      "occurrence": 1
+    }
+  ],
+  "reason": "preference_update"
+}
+```
+
+Patch semantics:
+- all-or-nothing
+- exact match + optional occurrence selector
+- ambiguous or missing match returns `422`
+- `If-Match` required for write/patch
+
 ## 8. Validation Rules (Runtime)
 For document mutations, service enforces:
 - `If-Match` optimistic concurrency.
 - max patch operation count (`100`).
 - request/body structural validity.
 - envelope payload sanity and bounded size limits (service-level guardrails).
+
+For native file patch (Phase 17 target), service will enforce:
+- deterministic text-edit matching (`old_text`, `new_text`, `occurrence`)
+- bounded edit count and bounded file payload size
+- explicit rejection for ambiguous/unmatched edits
 
 For events, service enforces required API contract fields.
 
@@ -289,33 +346,13 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 - Bootstrap tool: `tools/MemNet.Bootstrap` with `--check` and `--apply`.
 - Event index schema artifact: `infra/search/events-index.schema.json`.
 
-## 16. Compatibility and Migration (v1 -> v2)
-### 16.1 Breaking Conceptual Changes
-- Server-side `policy_id` ownership removed from runtime contract.
-- Server-side `binding_id` ownership removed from runtime contract.
-- `context:assemble` changes from policy-driven binding expansion to explicit document refs.
-- `retention:apply` changes from `policy_id` to explicit retention settings.
+## 16. Pre-Release Change Policy
+`mem.net` is pre-release and has no external compatibility commitments yet.
 
-### 16.2 Compatibility Window
-During migration, service may accept both v1 and v2 request shapes for selected endpoints.
-
-Compatibility mapping:
-- `PATCH /documents`
-  - v1: `policy_id`, `binding_id`, `ops`, `reason`, `evidence`
-  - v2: `ops`, `reason`, `evidence`
-- `PUT /documents`
-  - v1: `policy_id`, `binding_id`, `document`, `reason`, `evidence`
-  - v2: `document`, `reason`, `evidence`
-- `POST /context:assemble`
-  - v1: `policy_id`, `max_docs`, `max_chars_total`
-  - v2: `documents[]`, `max_docs`, `max_chars_total`
-- `POST /retention:apply`
-  - v1: `policy_id`, `as_of_utc`
-  - v2: `events_days`, `audit_days`, `snapshots_days`, `as_of_utc`
-
-### 16.3 Final State Goal
-Final v2 runtime removes policy/binding dependencies from service internals.
-Policy, slot mapping, and schema/path guardrails live in SDK/application layers.
+- breaking API and contract changes are allowed before first public stable release
+- service runtime remains policy-free (no `policy_id`/`binding_id` selectors)
+- policy/slot/schema guardrails belong to SDK/application layers
+- `/files` rollout can replace `/documents` semantics without legacy-shape support requirements
 
 ## 17. Deferred Extensions
 - dedicated compaction worker and compaction-specific config
@@ -330,4 +367,4 @@ Policy, slot mapping, and schema/path guardrails live in SDK/application layers.
 5. SDK/application can own memory semantics without server coupling.
 
 ## 19. Implementation Status
-Current implementation satisfies v2 acceptance criteria while maintaining v1 request-shape compatibility for transition.
+Current implementation satisfies v2 acceptance criteria with a single policy-free request shape.

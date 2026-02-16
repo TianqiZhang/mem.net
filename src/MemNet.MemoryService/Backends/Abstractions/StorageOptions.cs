@@ -5,8 +5,6 @@ namespace MemNet.MemoryService.Infrastructure;
 public sealed class StorageOptions
 {
     public required string DataRoot { get; init; }
-
-    public required string ConfigRoot { get; init; }
 }
 
 public static class JsonDefaults

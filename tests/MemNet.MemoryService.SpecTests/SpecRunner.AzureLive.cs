@@ -50,7 +50,6 @@ internal sealed partial class SpecRunner
         using var host = await ServiceHost.StartAsync(
             scope.RepoRoot,
             scope.DataRoot,
-            scope.ConfigRoot,
             provider: "azure",
             additionalEnvironment: azureEnv,
             serviceDllPath: liveDll);
@@ -62,7 +61,13 @@ internal sealed partial class SpecRunner
 
         var retentionResponse = await client.PostAsJsonAsync(
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
-            new { policy_id = "project-copilot-v1", as_of_utc = (DateTimeOffset?)null });
+            new
+            {
+                events_days = 365,
+                audit_days = 365,
+                snapshots_days = 60,
+                as_of_utc = (DateTimeOffset?)null
+            });
         Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
     }
 }

@@ -38,19 +38,17 @@ internal sealed partial class SpecRunner
 
         AddTest(nameof(PatchDocumentHappyPathAsync), PatchDocumentHappyPathAsync);
         AddTest(nameof(PatchDocumentReturns412OnEtagMismatchAsync), PatchDocumentReturns412OnEtagMismatchAsync);
-        AddTest(nameof(PatchDocumentReturns422OnPathPolicyViolationAsync), PatchDocumentReturns422OnPathPolicyViolationAsync);
-        AddTest(nameof(PatchDocumentV2AllowsPolicyFreeMutationAsync), PatchDocumentV2AllowsPolicyFreeMutationAsync);
-        AddTest(nameof(PatchDocumentRejectsPartialSelectorModeAsync), PatchDocumentRejectsPartialSelectorModeAsync);
-        AddTest(nameof(AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync), AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync);
-        AddTest(nameof(AssembleContextWithExplicitDocumentsV2Async), AssembleContextWithExplicitDocumentsV2Async);
+        AddTest(nameof(PatchDocumentReturns422OnInvalidPatchPathAsync), PatchDocumentReturns422OnInvalidPatchPathAsync);
+        AddTest(nameof(AssembleContextIncludesRequestedDocsAndRespectsBudgetsAsync), AssembleContextIncludesRequestedDocsAndRespectsBudgetsAsync);
+        AddTest(nameof(AssembleContextRejectsEmptyRequestAsync), AssembleContextRejectsEmptyRequestAsync);
         AddTest(nameof(EventSearchReturnsRelevantResultsAsync), EventSearchReturnsRelevantResultsAsync);
 
         AddTest(nameof(HttpDocumentPatchFlowWorksEndToEndAsync), HttpDocumentPatchFlowWorksEndToEndAsync);
-        AddTest(nameof(HttpDocumentPatchV2FlowWorksEndToEndAsync), HttpDocumentPatchV2FlowWorksEndToEndAsync);
+        AddTest(nameof(HttpDocumentPatchAddOperationWorksEndToEndAsync), HttpDocumentPatchAddOperationWorksEndToEndAsync);
         AddTest(nameof(HttpContextAssembleReturnsDefaultDocsAsync), HttpContextAssembleReturnsDefaultDocsAsync);
-        AddTest(nameof(HttpContextAssembleWithExplicitDocumentsV2Async), HttpContextAssembleWithExplicitDocumentsV2Async);
+        AddTest(nameof(HttpContextAssembleWithExplicitDocumentsWorksAsync), HttpContextAssembleWithExplicitDocumentsWorksAsync);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);
-        AddTest(nameof(SdkClientPatchAndGetV2FlowWorksAsync), SdkClientPatchAndGetV2FlowWorksAsync);
+        AddTest(nameof(SdkClientPatchAndGetFlowWorksAsync), SdkClientPatchAndGetFlowWorksAsync);
         AddTest(nameof(SdkClientMapsApiErrorsAsync), SdkClientMapsApiErrorsAsync);
         AddTest(nameof(SdkClientAssembleAndSearchFlowWorksAsync), SdkClientAssembleAndSearchFlowWorksAsync);
         AddTest(nameof(AgentMemoryPrepareTurnFlowWorksAsync), AgentMemoryPrepareTurnFlowWorksAsync);
@@ -64,7 +62,7 @@ internal sealed partial class SpecRunner
 #endif
 
         AddTest(nameof(RetentionSweepRemovesExpiredEventsAsync), RetentionSweepRemovesExpiredEventsAsync);
-        AddTest(nameof(RetentionSweepV2RequestShapeWorksAsync), RetentionSweepV2RequestShapeWorksAsync);
+        AddTest(nameof(RetentionSweepRequestShapeWorksAsync), RetentionSweepRequestShapeWorksAsync);
         AddTest(nameof(ForgetUserRemovesDocumentsAndEventsAsync), ForgetUserRemovesDocumentsAndEventsAsync);
 
 #if MEMNET_ENABLE_AZURE_SDK

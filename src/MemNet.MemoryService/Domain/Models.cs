@@ -44,29 +44,7 @@ public sealed record ReplayPatchRecord(
     string SnapshotUri,
     IReadOnlyList<string> MessageIds);
 
-public sealed record PolicyDefinition(
-    string PolicyId,
-    IReadOnlyList<DocumentBinding> DocumentBindings,
-    RetentionRules RetentionRules);
-
-public sealed record DocumentBinding(
-    string BindingId,
-    string Namespace,
-    string? Path,
-    string? PathTemplate,
-    string SchemaId,
-    string SchemaVersion,
-    int MaxChars,
-    int ReadPriority,
-    string WriteMode,
-    IReadOnlyList<string> AllowedPaths,
-    IReadOnlyList<string> RequiredContentPaths,
-    int? MaxContentChars,
-    int? MaxArrayItems);
-
 public sealed record RetentionRules(int SnapshotsDays, int EventsDays, int AuditDays);
-
-public sealed record PolicyConfig(IReadOnlyList<PolicyDefinition> Policies);
 
 public sealed record MutationResponse(string ETag, DocumentEnvelope Document);
 

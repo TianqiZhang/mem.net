@@ -2,10 +2,10 @@ using System.Net;
 
 internal sealed partial class SpecRunner
 {
-    private static async Task SdkClientPatchAndGetV2FlowWorksAsync()
+    private static async Task SdkClientPatchAndGetFlowWorksAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
         {
             BaseAddress = host.BaseAddress,
@@ -22,19 +22,19 @@ internal sealed partial class SpecRunner
             new MemNet.Client.PatchDocumentRequest(
                 Ops:
                 [
-                    new MemNet.Client.PatchOperation("add", "/content/sdk_note", "sdk-v2")
+                    new MemNet.Client.PatchOperation("add", "/content/sdk_note", "sdk-note")
                 ],
                 Reason: "sdk_patch"),
             ifMatch: before.ETag);
 
         Assert.True(!string.Equals(before.ETag, patched.ETag, StringComparison.Ordinal), "Patch should update etag.");
-        Assert.Equal("sdk-v2", patched.Document.Content["sdk_note"]?.GetValue<string>());
+        Assert.Equal("sdk-note", patched.Document.Content["sdk_note"]?.GetValue<string>());
     }
 
     private static async Task SdkClientMapsApiErrorsAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
         {
             BaseAddress = host.BaseAddress,
@@ -81,7 +81,7 @@ internal sealed partial class SpecRunner
     private static async Task SdkClientAssembleAndSearchFlowWorksAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
         {
             BaseAddress = host.BaseAddress,
@@ -102,7 +102,7 @@ internal sealed partial class SpecRunner
                 MaxCharsTotal: 30000));
 
         Assert.Equal(2, assembled.Documents.Count);
-        Assert.Equal(0, assembled.DroppedBindings.Count);
+        Assert.Equal(0, assembled.DroppedDocuments.Count);
 
         await client.WriteEventAsync(
             memScope,

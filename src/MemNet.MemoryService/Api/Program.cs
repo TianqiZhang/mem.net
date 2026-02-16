@@ -7,13 +7,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 var appRoot = builder.Environment.ContentRootPath;
 var configuredDataRoot = builder.Configuration["MemNet:DataRoot"] ?? Environment.GetEnvironmentVariable("MEMNET_DATA_ROOT");
-var configuredConfigRoot = builder.Configuration["MemNet:ConfigRoot"] ?? Environment.GetEnvironmentVariable("MEMNET_CONFIG_ROOT");
 var configuredProvider = builder.Configuration["MemNet:Provider"] ?? Environment.GetEnvironmentVariable("MEMNET_PROVIDER");
 
 var options = new StorageOptions
 {
-    DataRoot = string.IsNullOrWhiteSpace(configuredDataRoot) ? Path.Combine(appRoot, "data") : configuredDataRoot,
-    ConfigRoot = string.IsNullOrWhiteSpace(configuredConfigRoot) ? Path.Combine(appRoot, "Policy") : configuredConfigRoot
+    DataRoot = string.IsNullOrWhiteSpace(configuredDataRoot) ? Path.Combine(appRoot, "data") : configuredDataRoot
 };
 
 var provider = string.IsNullOrWhiteSpace(configuredProvider)
@@ -25,8 +23,6 @@ var backend = MemoryBackendFactory.Create(provider);
 builder.Services.AddSingleton<IMemoryBackend>(backend);
 backend.RegisterServices(builder.Services, builder.Configuration);
 
-builder.Services.AddSingleton<PolicyRegistry>();
-builder.Services.AddSingleton<PolicyRuntimeRules>();
 builder.Services.AddSingleton<MemoryCoordinator>();
 builder.Services.AddSingleton<ReplayService>();
 builder.Services.AddSingleton<DataLifecycleService>();

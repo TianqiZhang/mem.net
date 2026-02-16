@@ -16,13 +16,12 @@ Application-specific memory semantics (categories, slot rules, schemas) are owne
 - Preserve conflict-safe writes with ETag optimistic concurrency.
 - Keep runtime behavior deterministic with explicit document assembly inputs.
 
-## Core Capabilities (v2 + v1 compatibility)
+## Core Capabilities
 
 - Document read/patch/replace with ETag optimistic concurrency.
 - Context assembly from explicit document refs with budget controls.
 - Event digest write/search.
 - Retention and forget-user lifecycle operations.
-- Compatibility window for v1 request shapes (`policy_id`, `binding_id`) while migrating clients.
 - Pluggable provider mode:
   - `filesystem` (default local mode)
   - `azure` (Blob + optional AI Search, build-flag gated)
@@ -98,7 +97,6 @@ Expected response:
 ## Configuration
 
 Runtime storage/provider behavior is configured via environment variables.
-`src/MemNet.MemoryService/Policy/policy.json` is currently still used for v1 compatibility mode.
 
 ### Key environment variables
 
@@ -106,7 +104,6 @@ Runtime storage/provider behavior is configured via environment variables.
 |---|---|
 | `MEMNET_PROVIDER` | `filesystem` or `azure` |
 | `MEMNET_DATA_ROOT` | Local data root for filesystem provider |
-| `MEMNET_CONFIG_ROOT` | Policy root directory (contains `policy.json`) |
 | `MEMNET_AZURE_STORAGE_SERVICE_URI` | Blob service URI for azure provider |
 | `MEMNET_AZURE_DOCUMENTS_CONTAINER` | Documents container |
 | `MEMNET_AZURE_EVENTS_CONTAINER` | Events container |
@@ -170,18 +167,13 @@ Recommended deployment order:
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Read document |
-| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Patch document (`If-Match` required, v2 shape without `policy_id`) |
-| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Replace document (`If-Match` required, v2 shape without `policy_id`) |
+| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Patch document (`If-Match` required) |
+| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Replace document (`If-Match` required) |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/context:assemble` | Assemble explicit document refs |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events` | Write event digest |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events:search` | Search event digests |
-| `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention (explicit day values in v2) |
+| `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention (explicit day values) |
 | `DELETE` | `/v1/tenants/{tenantId}/users/{userId}/memory` | Forget all user memory |
-
-v1 compatibility note:
-- `PATCH`/`PUT` still accept `policy_id` + `binding_id`.
-- `context:assemble` still accepts `policy_id`.
-- `retention:apply` still accepts `policy_id`.
 
 ## SDK Quickstart (.NET)
 
@@ -257,7 +249,6 @@ var prepared = await memory.PrepareTurnAsync(
 - `src/MemNet.MemoryService/Api` - HTTP entrypoint and endpoint wiring.
 - `src/MemNet.MemoryService/Application` - orchestration services (`MemoryCoordinator`, lifecycle, replay).
 - `src/MemNet.MemoryService/Domain` - core models, errors, and patch engine.
-- `src/MemNet.MemoryService/Policy` - `PolicyRegistry` and default `policy.json`.
 - `src/MemNet.MemoryService/Backends` - store abstractions and provider implementations.
 - `src/MemNet.Client` - low-level .NET SDK for mem.net endpoints.
 - `src/MemNet.AgentMemory` - high-level agent memory SDK facade.

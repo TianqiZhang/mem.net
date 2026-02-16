@@ -61,7 +61,6 @@ public sealed record DroppedDocument(
     string Reason);
 
 public sealed record AssembledDocument(
-    string? BindingId,
     string Namespace,
     string Path,
     [property: JsonPropertyName("etag")]
@@ -70,7 +69,6 @@ public sealed record AssembledDocument(
 
 public sealed record AssembleContextResponse(
     IReadOnlyList<AssembledDocument> Documents,
-    IReadOnlyList<string> DroppedBindings,
     IReadOnlyList<DroppedDocument> DroppedDocuments);
 
 public sealed record EventEvidence(

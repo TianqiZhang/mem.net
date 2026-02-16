@@ -6,7 +6,7 @@ internal sealed partial class SpecRunner
     private static async Task AgentMemoryPrepareTurnFlowWorksAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
         {
             BaseAddress = host.BaseAddress,
@@ -74,7 +74,7 @@ internal sealed partial class SpecRunner
     private static async Task AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
         {
             BaseAddress = host.BaseAddress,
@@ -131,7 +131,7 @@ internal sealed partial class SpecRunner
     private static async Task SdkUpdateWithRetryResolvesEtagConflictsAsync()
     {
         using var scope = TestScope.Create();
-        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
         {
             BaseAddress = host.BaseAddress,
