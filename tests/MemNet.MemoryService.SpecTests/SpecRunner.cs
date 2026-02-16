@@ -39,14 +39,14 @@ internal sealed partial class SpecRunner
         AddTest(nameof(PatchDocumentHappyPathAsync), PatchDocumentHappyPathAsync);
         AddTest(nameof(PatchDocumentReturns412OnEtagMismatchAsync), PatchDocumentReturns412OnEtagMismatchAsync);
         AddTest(nameof(PatchDocumentReturns422OnInvalidPatchPathAsync), PatchDocumentReturns422OnInvalidPatchPathAsync);
-        AddTest(nameof(AssembleContextIncludesRequestedDocsAndRespectsBudgetsAsync), AssembleContextIncludesRequestedDocsAndRespectsBudgetsAsync);
+        AddTest(nameof(AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync), AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync);
         AddTest(nameof(AssembleContextRejectsEmptyRequestAsync), AssembleContextRejectsEmptyRequestAsync);
         AddTest(nameof(EventSearchReturnsRelevantResultsAsync), EventSearchReturnsRelevantResultsAsync);
 
         AddTest(nameof(HttpFilePatchFlowWorksEndToEndAsync), HttpFilePatchFlowWorksEndToEndAsync);
-        AddTest(nameof(HttpDocumentAliasPatchAddOperationWorksEndToEndAsync), HttpDocumentAliasPatchAddOperationWorksEndToEndAsync);
-        AddTest(nameof(HttpContextAssembleReturnsDefaultDocsAsync), HttpContextAssembleReturnsDefaultDocsAsync);
-        AddTest(nameof(HttpContextAssembleWithExplicitDocumentsWorksAsync), HttpContextAssembleWithExplicitDocumentsWorksAsync);
+        AddTest(nameof(HttpFilePatchAddOperationWorksEndToEndAsync), HttpFilePatchAddOperationWorksEndToEndAsync);
+        AddTest(nameof(HttpContextAssembleReturnsDefaultFilesAsync), HttpContextAssembleReturnsDefaultFilesAsync);
+        AddTest(nameof(HttpContextAssembleWithExplicitFilesWorksAsync), HttpContextAssembleWithExplicitFilesWorksAsync);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);
         AddTest(nameof(SdkClientPatchAndGetFlowWorksAsync), SdkClientPatchAndGetFlowWorksAsync);
         AddTest(nameof(SdkClientMapsApiErrorsAsync), SdkClientMapsApiErrorsAsync);

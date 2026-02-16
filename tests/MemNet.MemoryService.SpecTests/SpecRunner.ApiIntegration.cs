@@ -61,13 +61,13 @@ internal sealed partial class SpecRunner
         Assert.Equal(HttpStatusCode.PreconditionFailed, staleResponse.StatusCode);
     }
 
-    private static async Task HttpDocumentAliasPatchAddOperationWorksEndToEndAsync()
+    private static async Task HttpFilePatchAddOperationWorksEndToEndAsync()
     {
         using var scope = TestScope.Create();
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
-        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
+        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/files/user/long_term_memory.json";
 
         var getResponse = await client.GetAsync(route);
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
@@ -100,7 +100,7 @@ internal sealed partial class SpecRunner
         Assert.Equal("HTTP patch add operation update.", note);
     }
 
-    private static async Task HttpContextAssembleReturnsDefaultDocsAsync()
+    private static async Task HttpContextAssembleReturnsDefaultFilesAsync()
     {
         using var scope = TestScope.Create();
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
@@ -129,7 +129,7 @@ internal sealed partial class SpecRunner
         Assert.Equal(0, droppedDocs.Count);
     }
 
-    private static async Task HttpContextAssembleWithExplicitDocumentsWorksAsync()
+    private static async Task HttpContextAssembleWithExplicitFilesWorksAsync()
     {
         using var scope = TestScope.Create();
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
@@ -219,7 +219,7 @@ internal sealed partial class SpecRunner
 
         using var client = CreateHttpClient(host.BaseAddress);
 
-        var response = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json");
+        var response = await client.GetAsync($"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/files/user/long_term_memory.json");
         Assert.Equal(HttpStatusCode.NotImplemented, response.StatusCode);
 
         var payload = JsonNode.Parse(await response.Content.ReadAsStringAsync())?.AsObject()
@@ -372,7 +372,7 @@ internal sealed partial class SpecRunner
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
         using var client = CreateHttpClient(host.BaseAddress);
 
-        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
+        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/files/user/long_term_memory.json";
 
         var getResponse = await client.GetAsync(route);
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);

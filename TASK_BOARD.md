@@ -144,8 +144,8 @@
 - [x] Update `MEMORY_SERVICE_SPEC.md` and `SDK_SPEC.md` with authoritative file-first contracts and pre-release boundary
 
 ### 17B - API Simplification First (Service)
-- [x] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API (legacy `/documents/{**path}` alias retained temporarily for SDK migration)
-- [x] Remove public `namespace` concept from service contracts/domain models/audit records (legacy `/documents/{**path}` alias retained temporarily)
+- [x] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API
+- [x] Remove public `namespace` concept from service contracts/domain models/audit records
 - [x] Change `context:assemble` request/response from `documents[]` to path-only `files[]`
 - [ ] Implement deterministic text patch (`old_text`/`new_text`/`occurrence`) for file API
 - [x] Keep events/search/lifecycle behavior unchanged
@@ -157,15 +157,15 @@
 - [x] Keep optional slot/policy helper APIs app-facing while file tools are primary
 
 ### 17D - Test Hardening and Validation
-- [ ] Update all existing service+SDK tests to new `/files` + path-only contracts
+- [x] Update all existing service+SDK tests to new `/files` + path-only contracts
 - [ ] Add spec tests for text patch success/failure/ambiguous-match paths
 - [ ] Add ETag conflict + retry tests for file patch/write flows
-- [ ] Ensure filesystem and azure providers pass shared file-first acceptance scenarios (azure live run env-gated)
+- [x] Ensure filesystem and azure providers pass shared file-first acceptance scenarios (azure live run env-gated)
 
 ### 17E - Documentation and Cleanup
 - [ ] Add migration guide from slot/policy-oriented SDK usage to file-like memory tools
 - [x] Remove policy runtime module and compatibility-field references from service/docs
-- [ ] Update README examples to use markdown-first files and 4-tool contract only
+- [x] Update README examples to use markdown-first files and 4-tool contract only
 - [ ] Close Phase 17 only after full build + spec tests pass and docs/specs are in sync
 
 ## Residual Gaps (Post-Review)

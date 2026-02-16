@@ -1,7 +1,7 @@
 # mem.net SDK Technical Specification
 
 Project: `mem.net` SDK  
-Status: Active pre-release implementation; Phase 17 SDK refactor pending API simplification  
+Status: Active pre-release implementation; file-first SDK primitives available  
 Last Updated: February 16, 2026
 
 ## 1. Purpose
@@ -52,11 +52,11 @@ Optional future package:
 - `net8.0` minimum for first release.
 
 ## 6. Low-Level API (`MemNet.Client`)
-### 6.1 Core Types (Target After Phase 17C)
+### 6.1 Core Types
 - `MemNetClient`
 - `MemNetClientOptions`
 - `MemNetScope` (`tenantId`, `userId`)
-- `MemoryFileRef` (`path`)
+- `FileRef` (`path`)
 - `ApiErrorEnvelope` / `ApiError`
 
 ### 6.2 Client Options
@@ -69,13 +69,13 @@ Optional future package:
 - `HeaderProvider` callback for auth/gateway headers
 - diagnostics callbacks (`OnRequest`, `OnResponse`)
 
-### 6.3 Methods (Endpoint-Aligned, Target After Phase 17C)
+### 6.3 Methods (Endpoint-Aligned)
 All methods accept `CancellationToken`.
 
 - `GetServiceStatusAsync()` -> `GET /`
-- `LoadFileAsync(MemNetScope scope, string path)` -> `GET /files/{**path}`
-- `PatchFileAsync(MemNetScope scope, string path, PatchFileRequest request, string ifMatch)` -> `PATCH /files/{**path}`
-- `WriteFileAsync(MemNetScope scope, string path, WriteFileRequest request, string ifMatch)` -> `PUT /files/{**path}`
+- `GetFileAsync(MemNetScope scope, FileRef file)` -> `GET /files/{**path}`
+- `PatchFileAsync(MemNetScope scope, FileRef file, PatchDocumentRequest request, string ifMatch)` -> `PATCH /files/{**path}`
+- `WriteFileAsync(MemNetScope scope, FileRef file, ReplaceDocumentRequest request, string ifMatch)` -> `PUT /files/{**path}`
 - `AssembleContextAsync(MemNetScope scope, AssembleContextRequest request)` -> `POST /context:assemble`
 - `WriteEventAsync(MemNetScope scope, WriteEventRequest request)` -> `POST /events` (`202 Accepted`)
 - `SearchEventsAsync(MemNetScope scope, SearchEventsRequest request)` -> `POST /events:search`
@@ -84,12 +84,12 @@ All methods accept `CancellationToken`.
 
 No low-level method requires `policy_id` or `binding_id`.
 
-Phase 17 execution order:
-1. Phase 17B: service API moves from `/documents/{namespace}/{path}` to `/files/{**path}`.
-2. Phase 17C: SDK replaces document/namespace primitives with file/path primitives.
+Phase 17 status:
+- service and SDK now use path-only `/files/{**path}` semantics
+- namespace-based SDK references are removed from public surface
 
 ### 6.4 Response Shapes
-- document operations: `ETag` + `DocumentEnvelope`
+- file operations: `ETag` + `DocumentEnvelope`
 - lifecycle operations: `ForgetUserResult`, `RetentionSweepResult`
 
 ## 7. Error Model
@@ -202,10 +202,10 @@ Mutations:
 ### Phase D
 - docs/samples for practical agent use case
 
-## 14.1 Phase 17 Order (Current Work)
-1. API-first refactor: remove public namespace concept and make `/files/{**path}` canonical.
-2. SDK refactor: expose file-like primitives only for LLM-facing workflows.
-3. Test/doc consolidation after both code phases are complete.
+## 14.1 Phase 17 Outcome
+1. API-first refactor completed: namespace removed from public file APIs.
+2. SDK refactor completed: path-only file primitives in `MemNet.Client`.
+3. `MemNet.AgentMemory` exposes file-like tool methods for LLM harness workflows.
 
 ## 15. Acceptance Criteria (SDK v1)
 1. Low-level client covers all v2 endpoints.
@@ -217,9 +217,6 @@ Mutations:
 
 ## 16. Implementation Status
 Current implementation includes:
-- `src/MemNet.Client` low-level endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
-- `src/MemNet.AgentMemory` high-level policy/slot facade.
+- `src/MemNet.Client` path-based file endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
+- `src/MemNet.AgentMemory` high-level file-like tool methods (`MemoryRecallAsync`, `MemoryLoadFileAsync`, `MemoryPatchFileAsync`, `MemoryWriteFileAsync`) plus optional slot/policy helpers.
 - executable SDK contract coverage in `tests/MemNet.MemoryService.SpecTests`.
-
-Known gap:
-- current SDK still exposes namespace-based document primitives; Phase 17C will remove them.

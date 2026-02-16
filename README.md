@@ -14,12 +14,12 @@ Application-specific memory semantics (categories, slot rules, schemas) are owne
 - Keep memory durable and auditable across sessions and agents.
 - Keep the service generic while letting apps define memory semantics in SDK policy config.
 - Preserve conflict-safe writes with ETag optimistic concurrency.
-- Keep runtime behavior deterministic with explicit document assembly inputs.
+- Keep runtime behavior deterministic with explicit file assembly inputs.
 
 ## Core Capabilities
 
-- Document read/patch/replace with ETag optimistic concurrency.
-- Context assembly from explicit document refs with budget controls.
+- File read/patch/write with ETag optimistic concurrency.
+- Context assembly from explicit file refs with budget controls.
 - Event digest write/search.
 - Retention and forget-user lifecycle operations.
 - Pluggable provider mode:
@@ -42,7 +42,7 @@ Application-specific memory semantics (categories, slot rules, schemas) are owne
 
 Typical agent context behavior:
 - includes `profile.json` and `long_term_memory.json`
-- excludes templated project docs (load them on demand via document APIs)
+- excludes templated project docs (load them on demand via file APIs)
 - event digests are retrieved via `POST /events:search` by the caller
 
 ## Architecture
@@ -50,7 +50,7 @@ Typical agent context behavior:
 ```mermaid
 flowchart LR
     A["Orchestrator / Agents"] --> B["mem.net API"]
-    B --> C["Document Store"]
+    B --> C["File Store"]
     B --> D["Event Store"]
     B --> E["Audit Store"]
     D --> F["Search (derived)"]
@@ -166,10 +166,10 @@ Recommended deployment order:
 
 | Method | Route | Purpose |
 |---|---|---|
-| `GET` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Read document |
-| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Patch document (`If-Match` required) |
-| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Replace document (`If-Match` required) |
-| `POST` | `/v1/tenants/{tenantId}/users/{userId}/context:assemble` | Assemble explicit document refs |
+| `GET` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Read file |
+| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Patch file (`If-Match` required) |
+| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Write file (`If-Match` required) |
+| `POST` | `/v1/tenants/{tenantId}/users/{userId}/context:assemble` | Assemble explicit file refs |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events` | Write event digest |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events:search` | Search event digests |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention (explicit day values) |
@@ -189,10 +189,10 @@ var client = new MemNetClient(new MemNetClientOptions
 });
 
 var scope = new MemNetScope("tenant-1", "user-1");
-var profileRef = new DocumentRef("user", "profile.json");
+var profileRef = new FileRef("user/profile.json");
 
-var current = await client.GetDocumentAsync(scope, profileRef);
-var updated = await client.PatchDocumentAsync(
+var current = await client.GetFileAsync(scope, profileRef);
+var updated = await client.PatchFileAsync(
     scope,
     profileRef,
     new PatchDocumentRequest(
@@ -213,9 +213,9 @@ using MemNet.Client;
 var policy = new AgentMemoryPolicy(
     "learn-companion-default",
     [
-        new MemorySlotPolicy("profile", "user", "profile.json", null, LoadByDefault: true),
-        new MemorySlotPolicy("long_term_memory", "user", "long_term_memory.json", null, LoadByDefault: true),
-        new MemorySlotPolicy("project", "projects", null, "{project_id}.json", LoadByDefault: false)
+        new MemorySlotPolicy("profile", "user/profile.json", null, LoadByDefault: true),
+        new MemorySlotPolicy("long_term_memory", "user/long_term_memory.json", null, LoadByDefault: true),
+        new MemorySlotPolicy("project", null, "projects/{project_id}.json", LoadByDefault: false)
     ]);
 
 using var client = new MemNetClient(new MemNetClientOptions
@@ -227,11 +227,15 @@ using var client = new MemNetClient(new MemNetClientOptions
 var memory = new AgentMemory(client, policy);
 var scope = new MemNetScope("tenant-1", "user-1");
 
-var prepared = await memory.PrepareTurnAsync(
+var loaded = await memory.MemoryLoadFileAsync(scope, "user/long_term_memory.md");
+var patched = await memory.MemoryPatchFileAsync(
     scope,
-    new PrepareTurnRequest(
-        RecallQuery: "recent project decisions",
-        RecallTopK: 8));
+    "user/long_term_memory.md",
+    [
+        new MemoryPatchEdit(
+            OldText: "## Preferences\n- concise answers\n",
+            NewText: "## Preferences\n- concise answers\n- include tradeoffs first\n")
+    ]);
 ```
 
 ## Testing and CI

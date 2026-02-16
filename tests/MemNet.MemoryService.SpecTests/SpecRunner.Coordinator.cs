@@ -73,7 +73,7 @@ internal sealed partial class SpecRunner
             ex => ex.StatusCode == 422 && ex.Code == "INVALID_PATCH_PATH");
     }
 
-    private static async Task AssembleContextIncludesRequestedDocsAndRespectsBudgetsAsync()
+    private static async Task AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync()
     {
         using var scope = TestScope.Create();
 

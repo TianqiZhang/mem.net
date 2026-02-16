@@ -1,7 +1,7 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Active v2 baseline; Phase 17 API simplification in progress  
+Status: Active v2 baseline with path-only file API  
 Version: 2.0 (target)  
 Last Updated: February 16, 2026
 
@@ -9,7 +9,7 @@ Last Updated: February 16, 2026
 `mem.net` is a shared memory service for multi-agent systems using `(tenant_id, user_id)` scope.
 
 The v2 service focuses on infrastructure primitives:
-- durable document storage
+- durable file/document storage
 - optimistic concurrency via ETag
 - event digest write + search
 - lifecycle cleanup (retention and forget-user)
@@ -18,7 +18,7 @@ The v2 service focuses on infrastructure primitives:
 
 ## 2. First-Principles Scope (v2)
 Only these runtime capabilities are in scope:
-1. Scope isolation and document/event storage.
+1. Scope isolation and file/event storage.
 2. Conflict-safe writes with explicit `If-Match` semantics.
 3. Deterministic context assembly from caller-provided document refs.
 4. Lifecycle cleanup execution.
@@ -33,8 +33,8 @@ Anything outside these capabilities belongs in SDK/application layers.
 
 ## 4. High-Level Architecture
 - API service (ASP.NET Core Minimal API)
-  - document read/patch/replace
-  - explicit-doc context assembly
+  - file read/patch/write
+  - explicit-file context assembly
   - event write/search
   - retention/forget-user
 - Persistence provider
@@ -44,17 +44,17 @@ Anything outside these capabilities belongs in SDK/application layers.
   - local in-memory scoring for filesystem provider
   - Azure AI Search when configured for azure provider
 
-Source of truth is documents/events/audits/snapshots in storage. Search index is derived state.
+Source of truth is files/events/audits/snapshots in storage. Search index is derived state.
 
 ## 5. Storage Layout (Reference)
-Target storage layout after Phase 17B:
+Storage layout:
 `/tenants/{tenant_id}/users/{user_id}/files/{path}`  
 `/tenants/{tenant_id}/users/{user_id}/events/{event_id}.json`  
 `/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`  
 `/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json`
 
 ## 6. Core Data Contracts
-### 6.1 Document Envelope
+### 6.1 File Envelope
 ```json
 {
   "doc_id": "uuid",
@@ -98,22 +98,18 @@ All endpoints are server-to-server and scoped by `(tenantId, userId)`.
 ### 7.1 Service Status
 `GET /`
 
-### 7.2 Get File (Phase 17B Target)
+### 7.2 Get File
 `GET /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Response:
 ```json
 {
   "etag": "\"...\"",
-  "file": {
-    "path": "user/profile.md",
-    "content_type": "text/markdown",
-    "content": "..."
-  }
+  "document": { "...": "..." }
 }
 ```
 
-### 7.3 Patch File (Phase 17B Target)
+### 7.3 Patch File
 `PATCH /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Headers:
@@ -123,14 +119,10 @@ Headers:
 Request body:
 ```json
 {
-  "edits": [
-    {
-      "old_text": "## Preferences\n- concise answers\n",
-      "new_text": "## Preferences\n- concise answers\n- include tradeoffs first\n",
-      "occurrence": 1
-    }
+  "ops": [
+    { "op": "replace", "path": "/content/preferences/0", "value": "Use concise answers." }
   ],
-  "reason": "preference_update",
+  "reason": "live_update",
   "evidence": {
     "conversation_id": "c_123",
     "message_ids": ["m1"],
@@ -139,7 +131,7 @@ Request body:
 }
 ```
 
-### 7.4 Write File (Phase 17B Target)
+### 7.4 Write File
 `PUT /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Headers:
@@ -149,8 +141,7 @@ Headers:
 Request body:
 ```json
 {
-  "content_type": "text/markdown",
-  "content": "## Preferences\n- concise answers\n",
+  "document": { "...": "..." },
   "reason": "manual_rewrite",
   "evidence": {
     "conversation_id": "c_123",
@@ -160,15 +151,15 @@ Request body:
 }
 ```
 
-### 7.5 Assemble Context (Explicit File Refs, Phase 17B Target)
+### 7.5 Assemble Context (Explicit File Refs)
 `POST /v1/tenants/{tenantId}/users/{userId}/context:assemble`
 
 Request body:
 ```json
 {
   "files": [
-    { "path": "user/profile.md" },
-    { "path": "user/long_term_memory.md" }
+    { "path": "user/profile.json" },
+    { "path": "user/long_term_memory.json" }
   ],
   "max_docs": 8,
   "max_chars_total": 40000
@@ -176,7 +167,7 @@ Request body:
 ```
 
 Response includes:
-- `files[]` with resolved file content + etag
+- `files[]` with resolved envelope payload + etag
 - `dropped_files[]` when budgets prevent inclusion
 - missing files are omitted (not an error)
 
@@ -213,20 +204,19 @@ Request body:
 ### 7.9 Forget User
 `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
 
-### 7.10 Breaking Change Scope (Phase 17B)
-Phase 17B removes the public `namespace` concept from file endpoints.
+### 7.10 Namespace Removal
+The public `namespace` selector has been removed from the API surface.
 
-- old route family: `/documents/{namespace}/{path}`
-- new route family: `/files/{**path}`
-- assembly input changes from `documents[]` to `files[]` (path-only)
-- service remains pre-release; no backward-compat layer is required
+- canonical route family: `/files/{**path}`
+- assembly input is path-only `files[]`
+- path conventions (such as `user/...` and `projects/...`) are app-defined
 
 ## 8. Validation Rules (Runtime)
 For file mutations, service enforces:
 - `If-Match` optimistic concurrency.
-- deterministic text-edit matching (`old_text`, `new_text`, `occurrence`)
-- bounded edit count and bounded file payload size
-- explicit rejection for ambiguous/unmatched edits
+- max patch operation count (`100`).
+- request/body structural validity.
+- envelope payload sanity and bounded size limits.
 
 For events, service enforces required API contract fields.
 
@@ -241,10 +231,10 @@ ETag optimistic concurrency:
 Service does not provide multi-document transactions.
 
 ## 10. Context Assembly Behavior
-- Caller provides explicit file refs.
+- Caller provides explicit file refs (`files[]`).
 - Service reads refs in request order.
 - `max_docs` and `max_chars_total` budgets are enforced deterministically.
-- Returned files include etag + content payload.
+- Returned files include etag + envelope payload.
 - `events:search` remains a separate API call.
 
 ## 11. Retention and Deletion
@@ -322,12 +312,12 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 - multi-document transaction semantics
 
 ## 18. Acceptance Criteria (v2)
-1. Service API supports policy-free document mutation flows.
+1. Service API supports policy-free file mutation flows.
 2. ETag conflict semantics remain unchanged and explicit.
-3. Context assembly is explicit-doc based and deterministic.
+3. Context assembly is explicit-file based and deterministic.
 4. Event write/search and lifecycle endpoints remain functional.
 5. SDK/application can own memory semantics without server coupling.
 
 ## 19. Implementation Status
 Current implementation satisfies v2 acceptance criteria with a single policy-free request shape.
-Phase 17B/17C will finalize namespace removal and SDK file-first primitives.
+Phase 17B/17C namespace removal and file-first SDK primitives are implemented.
