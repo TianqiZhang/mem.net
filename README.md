@@ -186,7 +186,7 @@ using MemNet.Client;
 var client = new MemNetClient(new MemNetClientOptions
 {
     BaseAddress = new Uri("http://localhost:5071"),
-    ServiceId = "learn-companion"
+    ServiceId = "memory-agent"
 });
 
 var scope = new MemNetScope("tenant-1", "user-1");
@@ -212,7 +212,7 @@ using MemNet.AgentMemory;
 using MemNet.Client;
 
 var policy = new AgentMemoryPolicy(
-    "learn-companion-default",
+    "memory-agent-default",
     [
         new MemorySlotPolicy("profile", "user/profile.json", null, LoadByDefault: true),
         new MemorySlotPolicy("long_term_memory", "user/long_term_memory.json", null, LoadByDefault: true),
@@ -222,7 +222,7 @@ var policy = new AgentMemoryPolicy(
 using var client = new MemNetClient(new MemNetClientOptions
 {
     BaseAddress = new Uri("http://localhost:5071"),
-    ServiceId = "learn-companion"
+    ServiceId = "memory-agent"
 });
 
 var memory = new AgentMemory(client, policy);
@@ -237,6 +237,31 @@ var patched = await memory.MemoryPatchFileAsync(
             OldText: "## Preferences\n- concise answers\n",
             NewText: "## Preferences\n- concise answers\n- include tradeoffs first\n")
     ]);
+```
+
+## Official Agent Sample (Microsoft Agent Framework)
+
+Runnable reference sample:
+
+- `samples/MemNet.AgentFramework.Sample`
+
+It wires the official 4-tool memory contract directly into a Microsoft Agent Framework agent:
+
+- `memory_recall(query, topK)`
+- `memory_load_file(path)`
+- `memory_patch_file(path, old_text, new_text, occurrence)`
+- `memory_write_file(path, content)`
+
+Run it:
+
+```bash
+export OPENAI_API_KEY="<your_key>"
+export OPENAI_MODEL="gpt-4o-mini"
+export MEMNET_BASE_URL="http://localhost:5071"
+export MEMNET_TENANT_ID="tenant-demo"
+export MEMNET_USER_ID="user-demo"
+
+dotnet run --project samples/MemNet.AgentFramework.Sample
 ```
 
 ## Testing and CI
@@ -257,6 +282,7 @@ var patched = await memory.MemoryPatchFileAsync(
 - `src/MemNet.MemoryService/Backends` - store abstractions and provider implementations.
 - `src/MemNet.Client` - low-level .NET SDK for mem.net endpoints.
 - `src/MemNet.AgentMemory` - high-level agent memory SDK facade.
+- `samples/MemNet.AgentFramework.Sample` - official Microsoft Agent Framework + mem.net sample.
 - `tools/MemNet.Bootstrap` - deployment/bootstrap tool for Azure containers and AI Search index.
 - `infra/search/events-index.schema.json` - source-controlled schema for event search index.
 - `tests/MemNet.MemoryService.SpecTests` - executable specification tests.

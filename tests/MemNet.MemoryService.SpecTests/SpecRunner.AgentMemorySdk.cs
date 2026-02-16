@@ -14,7 +14,7 @@ internal sealed partial class SpecRunner
         });
 
         var policy = new MemNet.AgentMemory.AgentMemoryPolicy(
-            PolicyId: "learn-companion-default",
+            PolicyId: "memory-agent-default",
             Slots:
             [
                 new MemNet.AgentMemory.MemorySlotPolicy(
@@ -83,7 +83,7 @@ internal sealed partial class SpecRunner
         });
 
         var policy = new MemNet.AgentMemory.AgentMemoryPolicy(
-            PolicyId: "learn-companion-default",
+            PolicyId: "memory-agent-default",
             Slots:
             [
                 new MemNet.AgentMemory.MemorySlotPolicy(
@@ -187,7 +187,7 @@ internal sealed partial class SpecRunner
         });
 
         var policy = new MemNet.AgentMemory.AgentMemoryPolicy(
-            PolicyId: "learn-companion-default",
+            PolicyId: "memory-agent-default",
             Slots: []);
 
         var agentMemory = new MemNet.AgentMemory.AgentMemory(client, policy);
