@@ -121,8 +121,9 @@
 - [x] Update spec tests to cover both v1 compatibility and v2 native behavior
 
 ## Phase 16 - SDK Delivery
-- [ ] Create solution projects for `MemNet.Client` and `MemNet.AgentMemory`
-- [ ] Implement low-level v2 endpoint client with typed error mapping
+- [x] Create solution project for `MemNet.Client`
+- [ ] Create solution project for `MemNet.AgentMemory`
+- [x] Implement low-level v2 endpoint client with typed error mapping
 - [ ] Implement ETag conflict helper (`UpdateWithRetryAsync`) with bounded retries
 - [ ] Implement high-level `AgentMemory` facade (`PrepareTurnAsync`, `RecallAsync`, `RememberAsync`)
 - [ ] Add SDK contract tests against local service harness

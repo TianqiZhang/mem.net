@@ -50,6 +50,9 @@ internal sealed partial class SpecRunner
         AddTest(nameof(HttpContextAssembleReturnsDefaultDocsAsync), HttpContextAssembleReturnsDefaultDocsAsync);
         AddTest(nameof(HttpContextAssembleWithExplicitDocumentsV2Async), HttpContextAssembleWithExplicitDocumentsV2Async);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);
+        AddTest(nameof(SdkClientPatchAndGetV2FlowWorksAsync), SdkClientPatchAndGetV2FlowWorksAsync);
+        AddTest(nameof(SdkClientMapsApiErrorsAsync), SdkClientMapsApiErrorsAsync);
+        AddTest(nameof(SdkClientAssembleAndSearchFlowWorksAsync), SdkClientAssembleAndSearchFlowWorksAsync);
         AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
         AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
 
