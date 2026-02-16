@@ -39,11 +39,16 @@ internal sealed partial class SpecRunner
         AddTest(nameof(PatchDocumentHappyPathAsync), PatchDocumentHappyPathAsync);
         AddTest(nameof(PatchDocumentReturns412OnEtagMismatchAsync), PatchDocumentReturns412OnEtagMismatchAsync);
         AddTest(nameof(PatchDocumentReturns422OnPathPolicyViolationAsync), PatchDocumentReturns422OnPathPolicyViolationAsync);
+        AddTest(nameof(PatchDocumentV2AllowsPolicyFreeMutationAsync), PatchDocumentV2AllowsPolicyFreeMutationAsync);
+        AddTest(nameof(PatchDocumentRejectsPartialSelectorModeAsync), PatchDocumentRejectsPartialSelectorModeAsync);
         AddTest(nameof(AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync), AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync);
+        AddTest(nameof(AssembleContextWithExplicitDocumentsV2Async), AssembleContextWithExplicitDocumentsV2Async);
         AddTest(nameof(EventSearchReturnsRelevantResultsAsync), EventSearchReturnsRelevantResultsAsync);
 
         AddTest(nameof(HttpDocumentPatchFlowWorksEndToEndAsync), HttpDocumentPatchFlowWorksEndToEndAsync);
+        AddTest(nameof(HttpDocumentPatchV2FlowWorksEndToEndAsync), HttpDocumentPatchV2FlowWorksEndToEndAsync);
         AddTest(nameof(HttpContextAssembleReturnsDefaultDocsAsync), HttpContextAssembleReturnsDefaultDocsAsync);
+        AddTest(nameof(HttpContextAssembleWithExplicitDocumentsV2Async), HttpContextAssembleWithExplicitDocumentsV2Async);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);
         AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
         AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
@@ -53,6 +58,7 @@ internal sealed partial class SpecRunner
 #endif
 
         AddTest(nameof(RetentionSweepRemovesExpiredEventsAsync), RetentionSweepRemovesExpiredEventsAsync);
+        AddTest(nameof(RetentionSweepV2RequestShapeWorksAsync), RetentionSweepV2RequestShapeWorksAsync);
         AddTest(nameof(ForgetUserRemovesDocumentsAndEventsAsync), ForgetUserRemovesDocumentsAndEventsAsync);
 
 #if MEMNET_ENABLE_AZURE_SDK

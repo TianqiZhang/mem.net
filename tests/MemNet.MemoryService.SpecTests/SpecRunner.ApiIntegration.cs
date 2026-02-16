@@ -65,6 +65,45 @@ internal sealed partial class SpecRunner
         Assert.Equal(HttpStatusCode.PreconditionFailed, staleResponse.StatusCode);
     }
 
+    private static async Task HttpDocumentPatchV2FlowWorksEndToEndAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var client = CreateHttpClient(host.BaseAddress);
+
+        var route = $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/documents/user/long_term_memory.json";
+
+        var getResponse = await client.GetAsync(route);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var getPayload = JsonNode.Parse(await getResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected document payload.");
+        var etag = getPayload["etag"]?.GetValue<string>();
+        Assert.True(!string.IsNullOrWhiteSpace(etag), "Expected ETag from GET document.");
+
+        var patchRequest = new HttpRequestMessage(HttpMethod.Patch, route)
+        {
+            Content = JsonContent.Create(new
+            {
+                ops = new[]
+                {
+                    new { op = "add", path = "/content/freeform_note", value = "HTTP V2 patch update." }
+                },
+                reason = "live_update",
+                evidence = new { conversation_id = "c-http-v2", message_ids = new[] { "m1" }, snapshot_uri = (string?)null }
+            })
+        };
+        patchRequest.Headers.TryAddWithoutValidation("If-Match", etag);
+        patchRequest.Headers.TryAddWithoutValidation("X-Service-Id", "http-spec-tests");
+
+        var patchResponse = await client.SendAsync(patchRequest);
+        Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
+
+        var patchBody = JsonNode.Parse(await patchResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected patch response payload.");
+        var note = patchBody["document"]?["content"]?["freeform_note"]?.GetValue<string>();
+        Assert.Equal("HTTP V2 patch update.", note);
+    }
+
     private static async Task HttpContextAssembleReturnsDefaultDocsAsync()
     {
         using var scope = TestScope.Create();
@@ -85,6 +124,35 @@ internal sealed partial class SpecRunner
             ?? throw new Exception("Expected context response.");
         var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
         Assert.Equal(2, contextDocs.Count);
+    }
+
+    private static async Task HttpContextAssembleWithExplicitDocumentsV2Async()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var client = CreateHttpClient(host.BaseAddress);
+
+        var contextResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
+            new
+            {
+                documents = new[]
+                {
+                    new { @namespace = "user", path = "profile.json" },
+                    new { @namespace = "user", path = "long_term_memory.json" }
+                },
+                max_docs = 4,
+                max_chars_total = 30000
+            });
+
+        Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
+        var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected context response.");
+        var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
+        Assert.Equal(2, contextDocs.Count);
+
+        var droppedBindings = contextBody["dropped_bindings"] as JsonArray ?? throw new Exception("Expected dropped_bindings array.");
+        Assert.Equal(0, droppedBindings.Count);
     }
 
     private static async Task HttpEventsWriteAndSearchFlowWorksAsync()
@@ -233,6 +301,61 @@ internal sealed partial class SpecRunner
 
         Assert.True(!eventIds.Contains("evt-retention-old"), "Expired event should have been removed.");
         Assert.True(eventIds.Contains("evt-retention-fresh"), "Fresh event should remain after retention sweep.");
+    }
+
+    private static async Task RetentionSweepV2RequestShapeWorksAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot, scope.ConfigRoot);
+        using var client = CreateHttpClient(host.BaseAddress);
+
+        var oldTimestamp = DateTimeOffset.UtcNow.AddDays(-420);
+        var writeEventResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events",
+            new
+            {
+                @event = new
+                {
+                    event_id = "evt-retention-v2-old",
+                    tenant_id = scope.Keys.Tenant,
+                    user_id = scope.Keys.User,
+                    service_id = "retention-tests",
+                    timestamp = oldTimestamp,
+                    source_type = "chat",
+                    digest = "Old event v2 retention",
+                    keywords = new[] { "old" },
+                    project_ids = new[] { "project-alpha" },
+                    snapshot_uri = "blob://snapshots/old-v2",
+                    evidence = new { message_ids = new[] { "m-old-v2" }, start = 1, end = 1 }
+                }
+            });
+        Assert.Equal(HttpStatusCode.Accepted, writeEventResponse.StatusCode);
+
+        var retentionResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/retention:apply",
+            new
+            {
+                events_days = 365,
+                audit_days = 365,
+                snapshots_days = 60,
+                as_of_utc = (DateTimeOffset?)null
+            });
+        Assert.Equal(HttpStatusCode.OK, retentionResponse.StatusCode);
+
+        var searchResponse = await client.PostAsJsonAsync(
+            $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/events:search",
+            new { query = (string?)null, top_k = 20 });
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+
+        var searchBody = JsonNode.Parse(await searchResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected event search response.");
+        var results = searchBody["results"] as JsonArray ?? throw new Exception("Expected results array.");
+        var eventIds = results
+            .Select(r => r?["event_id"]?.GetValue<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.True(!eventIds.Contains("evt-retention-v2-old"), "Expired event should have been removed by v2 retention request.");
     }
 
     private static async Task ForgetUserRemovesDocumentsAndEventsAsync()

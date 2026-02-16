@@ -191,7 +191,7 @@ app.MapPost("/v1/tenants/{tenantId}/users/{userId}/retention:apply", async (
     DataLifecycleService lifecycleService,
     CancellationToken cancellationToken) =>
 {
-    var result = await lifecycleService.ApplyRetentionAsync(tenantId, userId, request.PolicyId, request.AsOfUtc, cancellationToken);
+    var result = await lifecycleService.ApplyRetentionAsync(tenantId, userId, request, cancellationToken);
     return Results.Ok(result);
 });
 

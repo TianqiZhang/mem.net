@@ -114,11 +114,11 @@
 
 ## Phase 15 - Service v2 Migration
 - [x] Refactor runtime checks into service-core guards vs policy-dependent checks
-- [ ] Add v2 request contracts without `policy_id`/`binding_id`
-- [ ] Keep v1 request compatibility during migration window
-- [ ] Migrate `context:assemble` to explicit document refs
-- [ ] Migrate `retention:apply` to explicit retention settings
-- [ ] Update spec tests to cover both v1 compatibility and v2 native behavior
+- [x] Add v2 request contracts without `policy_id`/`binding_id`
+- [x] Keep v1 request compatibility during migration window
+- [x] Migrate `context:assemble` to explicit document refs
+- [x] Migrate `retention:apply` to explicit retention settings
+- [x] Update spec tests to cover both v1 compatibility and v2 native behavior
 
 ## Phase 16 - SDK Delivery
 - [ ] Create solution projects for `MemNet.Client` and `MemNet.AgentMemory`

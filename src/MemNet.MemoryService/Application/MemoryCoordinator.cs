@@ -13,6 +13,7 @@ public sealed class MemoryCoordinator(
     ILogger<MemoryCoordinator> logger)
 {
     private const int MaxOpsPerPatch = 100;
+    private const int MaxDocumentChars = 256_000;
     private static readonly IDisposable NoopScope = new ScopeHandle();
 
     public async Task<DocumentRecord> GetDocumentAsync(DocumentKey key, CancellationToken cancellationToken = default)
@@ -44,8 +45,13 @@ public sealed class MemoryCoordinator(
         Guard.True(request.Ops.Count > 0, "INVALID_PATCH", "Patch operations are required.", StatusCodes.Status400BadRequest);
         Guard.True(request.Ops.Count <= MaxOpsPerPatch, "PATCH_TOO_LARGE", "Patch operation count exceeds limit.", StatusCodes.Status422UnprocessableEntity);
 
-        var binding = policyRules.ResolveMutationBinding(key, request.PolicyId, request.BindingId);
-        policyRules.ValidateWritablePaths(binding, request.Ops);
+        var selectorMode = ResolveSelectorMode(request.PolicyId, request.BindingId);
+        DocumentBinding? policyBinding = null;
+        if (selectorMode == MutationSelectorMode.PolicyBinding)
+        {
+            policyBinding = policyRules.ResolveMutationBinding(key, request.PolicyId!, request.BindingId!);
+            policyRules.ValidateWritablePaths(policyBinding, request.Ops);
+        }
 
         var existing = await documentStore.GetAsync(key, cancellationToken);
         if (existing is null)
@@ -67,7 +73,14 @@ public sealed class MemoryCoordinator(
             UpdatedBy = actor
         };
 
-        policyRules.ValidateEnvelope(binding, patchedEnvelope);
+        if (policyBinding is not null)
+        {
+            policyRules.ValidateEnvelope(policyBinding, patchedEnvelope);
+        }
+        else
+        {
+            ValidateCoreEnvelope(patchedEnvelope);
+        }
 
         var saved = await documentStore.UpsertAsync(key, patchedEnvelope, ifMatch, cancellationToken);
         var response = new MutationResponse(saved.ETag, saved.Envelope);
@@ -102,12 +115,24 @@ public sealed class MemoryCoordinator(
 
         Guard.True(!string.IsNullOrWhiteSpace(ifMatch), "MISSING_IF_MATCH", "If-Match header is required.", StatusCodes.Status400BadRequest);
 
-        var binding = policyRules.ResolveMutationBinding(key, request.PolicyId, request.BindingId);
-        policyRules.EnsureReplaceAllowed(binding);
+        var selectorMode = ResolveSelectorMode(request.PolicyId, request.BindingId);
+        DocumentBinding? policyBinding = null;
+        if (selectorMode == MutationSelectorMode.PolicyBinding)
+        {
+            policyBinding = policyRules.ResolveMutationBinding(key, request.PolicyId!, request.BindingId!);
+            policyRules.EnsureReplaceAllowed(policyBinding);
+        }
 
         var now = DateTimeOffset.UtcNow;
         var replacement = request.Document with { UpdatedAt = now, UpdatedBy = actor };
-        policyRules.ValidateEnvelope(binding, replacement);
+        if (policyBinding is not null)
+        {
+            policyRules.ValidateEnvelope(policyBinding, replacement);
+        }
+        else
+        {
+            ValidateCoreEnvelope(replacement);
+        }
 
         var saved = await documentStore.UpsertAsync(key, replacement, ifMatch, cancellationToken);
         var response = new MutationResponse(saved.ETag, saved.Envelope);
@@ -139,50 +164,87 @@ public sealed class MemoryCoordinator(
         using var scope = BeginScope("context_assemble", tenantId, userId, policyId: request.PolicyId);
         logger.LogInformation("Assembling context.");
 
-        var sortedBindings = policyRules.ResolveAssembleBindings(request.PolicyId);
-
         var maxDocs = request.MaxDocs.GetValueOrDefault(4);
         var maxCharsTotal = request.MaxCharsTotal.GetValueOrDefault(30000);
 
         var result = new List<AssembledDocument>();
-        var dropped = new List<string>();
+        var droppedBindings = new List<string>();
+        var droppedDocuments = new List<DroppedDocument>();
         var charBudgetUsed = 0;
 
-        foreach (var binding in sortedBindings)
+        var hasPolicy = !string.IsNullOrWhiteSpace(request.PolicyId);
+        var hasDocuments = request.Documents is { Count: > 0 };
+        Guard.True(hasPolicy || hasDocuments, "MISSING_ASSEMBLY_TARGETS", "Provide policy_id (v1) or documents[] (v2) for context assembly.", StatusCodes.Status400BadRequest);
+        Guard.True(!(hasPolicy && hasDocuments), "INVALID_ASSEMBLY_MODE", "Cannot provide both policy_id and documents[] in one context assembly request.", StatusCodes.Status400BadRequest);
+
+        if (hasPolicy)
         {
-            if (result.Count >= maxDocs)
+            var sortedBindings = policyRules.ResolveAssembleBindings(request.PolicyId!);
+            foreach (var binding in sortedBindings)
             {
-                dropped.Add(binding.BindingId);
-                continue;
-            }
+                if (result.Count >= maxDocs)
+                {
+                    droppedBindings.Add(binding.BindingId);
+                    continue;
+                }
 
-            var resolvedPath = policyRules.ResolveBindingPath(binding);
-            if (resolvedPath is null)
+                var resolvedPath = policyRules.ResolveBindingPath(binding);
+                if (resolvedPath is null)
+                {
+                    continue;
+                }
+
+                var key = new DocumentKey(tenantId, userId, binding.Namespace, resolvedPath);
+                var doc = await documentStore.GetAsync(key, cancellationToken);
+                if (doc is null)
+                {
+                    continue;
+                }
+
+                var chars = JsonSerializer.Serialize(doc.Envelope, JsonDefaults.Options).Length;
+                if (charBudgetUsed + chars > maxCharsTotal)
+                {
+                    droppedBindings.Add(binding.BindingId);
+                    continue;
+                }
+
+                charBudgetUsed += chars;
+                result.Add(new AssembledDocument(binding.BindingId, binding.Namespace, resolvedPath, doc.ETag, doc.Envelope));
+            }
+        }
+        else
+        {
+            foreach (var requested in request.Documents!)
             {
-                continue;
-            }
+                if (result.Count >= maxDocs)
+                {
+                    droppedDocuments.Add(new DroppedDocument(requested.Namespace, requested.Path, "max_docs"));
+                    continue;
+                }
 
-            var key = new DocumentKey(tenantId, userId, binding.Namespace, resolvedPath);
-            var doc = await documentStore.GetAsync(key, cancellationToken);
-            if (doc is null)
-            {
-                continue;
-            }
+                var key = new DocumentKey(tenantId, userId, requested.Namespace, requested.Path);
+                var doc = await documentStore.GetAsync(key, cancellationToken);
+                if (doc is null)
+                {
+                    continue;
+                }
 
-            var chars = JsonSerializer.Serialize(doc.Envelope, JsonDefaults.Options).Length;
-            if (charBudgetUsed + chars > maxCharsTotal)
-            {
-                dropped.Add(binding.BindingId);
-                continue;
-            }
+                var chars = JsonSerializer.Serialize(doc.Envelope, JsonDefaults.Options).Length;
+                if (charBudgetUsed + chars > maxCharsTotal)
+                {
+                    droppedDocuments.Add(new DroppedDocument(requested.Namespace, requested.Path, "max_chars_total"));
+                    continue;
+                }
 
-            charBudgetUsed += chars;
-            result.Add(new AssembledDocument(binding.BindingId, binding.Namespace, resolvedPath, doc.ETag, doc.Envelope));
+                charBudgetUsed += chars;
+                result.Add(new AssembledDocument(null, requested.Namespace, requested.Path, doc.ETag, doc.Envelope));
+            }
         }
 
         return new AssembleContextResponse(
             Documents: result,
-            DroppedBindings: dropped);
+            DroppedBindings: droppedBindings,
+            DroppedDocuments: droppedDocuments);
     }
 
     public Task WriteEventAsync(EventDigest digest, CancellationToken cancellationToken = default)
@@ -242,5 +304,45 @@ public sealed class MemoryCoordinator(
         public void Dispose()
         {
         }
+    }
+
+    private static void ValidateCoreEnvelope(DocumentEnvelope envelope)
+    {
+        Guard.True(!string.IsNullOrWhiteSpace(envelope.DocId), "INVALID_DOCUMENT", "Envelope doc_id is required.", StatusCodes.Status422UnprocessableEntity);
+        Guard.True(!string.IsNullOrWhiteSpace(envelope.SchemaId), "INVALID_DOCUMENT", "Envelope schema_id is required.", StatusCodes.Status422UnprocessableEntity);
+        Guard.True(!string.IsNullOrWhiteSpace(envelope.SchemaVersion), "INVALID_DOCUMENT", "Envelope schema_version is required.", StatusCodes.Status422UnprocessableEntity);
+
+        var serialized = JsonSerializer.Serialize(envelope, JsonDefaults.Options);
+        Guard.True(
+            serialized.Length <= MaxDocumentChars,
+            "DOCUMENT_SIZE_EXCEEDED",
+            $"Document exceeds service max document size ({MaxDocumentChars} chars).",
+            StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static MutationSelectorMode ResolveSelectorMode(string? policyId, string? bindingId)
+    {
+        var hasPolicy = !string.IsNullOrWhiteSpace(policyId);
+        var hasBinding = !string.IsNullOrWhiteSpace(bindingId);
+        if (!hasPolicy && !hasBinding)
+        {
+            return MutationSelectorMode.None;
+        }
+
+        if (hasPolicy && hasBinding)
+        {
+            return MutationSelectorMode.PolicyBinding;
+        }
+
+        throw new ApiException(
+            StatusCodes.Status400BadRequest,
+            "INVALID_SELECTOR_MODE",
+            "policy_id and binding_id must both be set for v1 compatibility mode, or both omitted for v2 mode.");
+    }
+
+    private enum MutationSelectorMode
+    {
+        None,
+        PolicyBinding
     }
 }
