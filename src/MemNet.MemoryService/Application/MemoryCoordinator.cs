@@ -131,24 +131,24 @@ public sealed class MemoryCoordinator(
         using var scope = BeginScope("context_assemble", tenantId, userId);
         logger.LogInformation("Assembling context.");
 
-        Guard.True(request.Documents.Count > 0, "MISSING_ASSEMBLY_TARGETS", "Provide at least one document ref for context assembly.", StatusCodes.Status400BadRequest);
+        Guard.True(request.Files.Count > 0, "MISSING_ASSEMBLY_TARGETS", "Provide at least one file ref for context assembly.", StatusCodes.Status400BadRequest);
 
         var maxDocs = request.MaxDocs.GetValueOrDefault(4);
         var maxCharsTotal = request.MaxCharsTotal.GetValueOrDefault(30000);
 
-        var result = new List<AssembledDocument>();
-        var droppedDocuments = new List<DroppedDocument>();
+        var result = new List<AssembledFile>();
+        var droppedFiles = new List<DroppedFile>();
         var charBudgetUsed = 0;
 
-        foreach (var requested in request.Documents)
+        foreach (var requested in request.Files)
         {
             if (result.Count >= maxDocs)
             {
-                droppedDocuments.Add(new DroppedDocument(requested.Namespace, requested.Path, "max_docs"));
+                droppedFiles.Add(new DroppedFile(requested.Path, "max_docs"));
                 continue;
             }
 
-            var key = new DocumentKey(tenantId, userId, BuildScopedPath(requested.Namespace, requested.Path));
+            var key = new DocumentKey(tenantId, userId, requested.Path);
             var doc = await documentStore.GetAsync(key, cancellationToken);
             if (doc is null)
             {
@@ -158,17 +158,17 @@ public sealed class MemoryCoordinator(
             var chars = JsonSerializer.Serialize(doc.Envelope, JsonDefaults.Options).Length;
             if (charBudgetUsed + chars > maxCharsTotal)
             {
-                droppedDocuments.Add(new DroppedDocument(requested.Namespace, requested.Path, "max_chars_total"));
+                droppedFiles.Add(new DroppedFile(requested.Path, "max_chars_total"));
                 continue;
             }
 
             charBudgetUsed += chars;
-            result.Add(new AssembledDocument(requested.Namespace, requested.Path, doc.ETag, doc.Envelope));
+            result.Add(new AssembledFile(requested.Path, doc.ETag, doc.Envelope));
         }
 
         return new AssembleContextResponse(
-            Documents: result,
-            DroppedDocuments: droppedDocuments);
+            Files: result,
+            DroppedFiles: droppedFiles);
     }
 
     public Task WriteEventAsync(EventDigest digest, CancellationToken cancellationToken = default)
@@ -217,13 +217,6 @@ public sealed class MemoryCoordinator(
             ["path"] = path,
             ["event_id"] = eventId
         }) ?? NoopScope;
-    }
-
-    private static string BuildScopedPath(string @namespace, string path)
-    {
-        var ns = (@namespace ?? string.Empty).Trim('/');
-        var leaf = (path ?? string.Empty).Trim('/');
-        return string.IsNullOrWhiteSpace(ns) ? leaf : $"{ns}/{leaf}";
     }
 
     private sealed class ScopeHandle : IDisposable

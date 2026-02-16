@@ -81,29 +81,29 @@ internal sealed partial class SpecRunner
             tenantId: scope.Keys.Tenant,
             userId: scope.Keys.User,
             request: new AssembleContextRequest(
-                Documents:
+                Files:
                 [
-                    new AssembleDocumentRef("user", "profile.json"),
-                    new AssembleDocumentRef("user", "long_term_memory.json")
+                    new AssembleFileRef("user/profile.json"),
+                    new AssembleFileRef("user/long_term_memory.json")
                 ],
                 MaxDocs: 5,
                 MaxCharsTotal: 30000));
 
-        Assert.Equal(2, full.Documents.Count);
+        Assert.Equal(2, full.Files.Count);
 
         var tinyBudget = await scope.Coordinator.AssembleContextAsync(
             tenantId: scope.Keys.Tenant,
             userId: scope.Keys.User,
             request: new AssembleContextRequest(
-                Documents:
+                Files:
                 [
-                    new AssembleDocumentRef("user", "profile.json"),
-                    new AssembleDocumentRef("user", "long_term_memory.json")
+                    new AssembleFileRef("user/profile.json"),
+                    new AssembleFileRef("user/long_term_memory.json")
                 ],
                 MaxDocs: 5,
                 MaxCharsTotal: 300));
 
-        Assert.True(tinyBudget.DroppedDocuments.Count > 0, "Expected dropped_documents when char budget is small.");
+        Assert.True(tinyBudget.DroppedFiles.Count > 0, "Expected dropped_files when char budget is small.");
     }
 
     private static async Task AssembleContextRejectsEmptyRequestAsync()
@@ -117,7 +117,7 @@ internal sealed partial class SpecRunner
                     tenantId: scope.Keys.Tenant,
                     userId: scope.Keys.User,
                     request: new AssembleContextRequest(
-                        Documents: [],
+                        Files: [],
                         MaxDocs: 5,
                         MaxCharsTotal: 30000));
             },

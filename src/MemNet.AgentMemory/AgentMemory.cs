@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Net;
+using MemNet.Client;
 
 namespace MemNet.AgentMemory;
 
@@ -29,38 +31,38 @@ public sealed class AgentMemory
             .ToArray();
 
         var assembledDocs = new List<PreparedSlotDocument>();
-        var dropped = new List<MemNet.Client.DroppedDocument>();
+        var dropped = new List<MemNet.Client.DroppedFile>();
 
         if (selectedSlotIds.Length > 0)
         {
             var refMap = new Dictionary<string, string>(StringComparer.Ordinal);
-            var refs = new List<MemNet.Client.AssembleDocumentRef>(selectedSlotIds.Length);
+            var refs = new List<MemNet.Client.AssembleFileRef>(selectedSlotIds.Length);
             foreach (var slotId in selectedSlotIds)
             {
                 var resolved = ResolveSlot(slotId, request.TemplateVariables);
-                refs.Add(new MemNet.Client.AssembleDocumentRef(resolved.Document.Namespace, resolved.Document.Path));
-                refMap[$"{resolved.Document.Namespace}|{resolved.Document.Path}"] = slotId;
+                refs.Add(new MemNet.Client.AssembleFileRef(resolved.File.Path));
+                refMap[resolved.File.Path] = slotId;
             }
 
             var assembled = await _client.AssembleContextAsync(
                 scope,
                 new MemNet.Client.AssembleContextRequest(
-                    Documents: refs,
+                    Files: refs,
                     MaxDocs: request.MaxDocs ?? _options.DefaultAssembleMaxDocs,
                     MaxCharsTotal: request.MaxCharsTotal ?? _options.DefaultAssembleMaxCharsTotal),
                 cancellationToken);
 
-            foreach (var doc in assembled.Documents)
+            foreach (var doc in assembled.Files)
             {
-                refMap.TryGetValue($"{doc.Namespace}|{doc.Path}", out var slotId);
+                refMap.TryGetValue(doc.Path, out var slotId);
                 assembledDocs.Add(new PreparedSlotDocument(
                     SlotId: slotId,
-                    Document: new MemNet.Client.DocumentRef(doc.Namespace, doc.Path),
+                    File: new MemNet.Client.FileRef(doc.Path),
                     ETag: doc.ETag,
                     Envelope: doc.Document));
             }
 
-            dropped.AddRange(assembled.DroppedDocuments);
+            dropped.AddRange(assembled.DroppedFiles);
         }
 
         var events = Array.Empty<MemNet.Client.EventDigest>();
@@ -90,11 +92,11 @@ public sealed class AgentMemory
         CancellationToken cancellationToken = default)
     {
         var resolved = ResolveSlot(slotId, templateVariables);
-        var doc = await _client.GetDocumentAsync(scope, resolved.Document, cancellationToken);
-        return new PreparedSlotDocument(resolved.Slot.SlotId, resolved.Document, doc.ETag, doc.Document);
+        var doc = await _client.GetFileAsync(scope, resolved.File, cancellationToken);
+        return new PreparedSlotDocument(resolved.Slot.SlotId, resolved.File, doc.ETag, doc.Document);
     }
 
-    public async Task<MemNet.Client.DocumentMutationResult> PatchSlotAsync(
+    public async Task<MemNet.Client.FileMutationResult> PatchSlotAsync(
         MemNet.Client.MemNetScope scope,
         string slotId,
         SlotPatchRequest request,
@@ -105,16 +107,16 @@ public sealed class AgentMemory
         var resolved = ResolveSlot(slotId, request.TemplateVariables);
         ValidatePatchRules(resolved.Slot, request.Ops);
 
-        return await _client.PatchDocumentAsync(
+        return await _client.PatchFileAsync(
             scope,
-            resolved.Document,
+            resolved.File,
             new MemNet.Client.PatchDocumentRequest(request.Ops, request.Reason, request.Evidence),
             ifMatch,
             serviceId,
             cancellationToken);
     }
 
-    public async Task<MemNet.Client.DocumentMutationResult> ReplaceSlotAsync(
+    public async Task<MemNet.Client.FileMutationResult> ReplaceSlotAsync(
         MemNet.Client.MemNetScope scope,
         string slotId,
         SlotReplaceRequest request,
@@ -125,9 +127,9 @@ public sealed class AgentMemory
         var resolved = ResolveSlot(slotId, request.TemplateVariables);
         ValidateReplaceRules(resolved.Slot, request.Document.Content);
 
-        return await _client.ReplaceDocumentAsync(
+        return await _client.WriteFileAsync(
             scope,
-            resolved.Document,
+            resolved.File,
             new MemNet.Client.ReplaceDocumentRequest(request.Document, request.Reason, request.Evidence),
             ifMatch,
             serviceId,
@@ -159,12 +161,217 @@ public sealed class AgentMemory
         return response.Results;
     }
 
+    public Task<IReadOnlyList<MemNet.Client.EventDigest>> MemoryRecallAsync(
+        MemNet.Client.MemNetScope scope,
+        string? query,
+        int topK = 8,
+        CancellationToken cancellationToken = default)
+    {
+        return RecallAsync(
+            scope,
+            new RecallRequest(
+                Query: query,
+                TopK: topK),
+            cancellationToken);
+    }
+
+    public async Task<MemoryFile> MemoryLoadFileAsync(
+        MemNet.Client.MemNetScope scope,
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        var file = await _client.GetFileAsync(scope, new MemNet.Client.FileRef(path), cancellationToken);
+        var extracted = ExtractFileContent(file.Document);
+        return new MemoryFile(path, extracted.ContentType, extracted.Content, file.ETag);
+    }
+
+    public async Task<MemoryFile> MemoryWriteFileAsync(
+        MemNet.Client.MemNetScope scope,
+        string path,
+        string content,
+        string reason = "memory_write_file",
+        string contentType = "text/markdown",
+        string? serviceId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var fileRef = new MemNet.Client.FileRef(path);
+        MemNet.Client.FileReadResult? existing = null;
+        string ifMatch;
+        try
+        {
+            existing = await _client.GetFileAsync(scope, fileRef, cancellationToken);
+            ifMatch = existing.ETag;
+        }
+        catch (MemNet.Client.MemNetApiException ex)
+            when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            ifMatch = "*";
+        }
+
+        var envelope = BuildFileEnvelope(existing?.Document, contentType, content);
+        var updated = await _client.WriteFileAsync(
+            scope,
+            fileRef,
+            new MemNet.Client.ReplaceDocumentRequest(envelope, reason),
+            ifMatch,
+            serviceId,
+            cancellationToken);
+
+        return new MemoryFile(path, contentType, content, updated.ETag);
+    }
+
+    public async Task<MemoryFile> MemoryPatchFileAsync(
+        MemNet.Client.MemNetScope scope,
+        string path,
+        IReadOnlyList<MemoryPatchEdit> edits,
+        string reason = "memory_patch_file",
+        string? serviceId = null,
+        int maxConflictRetries = 3,
+        CancellationToken cancellationToken = default)
+    {
+        GuardPatchEdits(edits);
+
+        var fileRef = new MemNet.Client.FileRef(path);
+        var updated = await _client.UpdateWithRetryAsync(
+            scope,
+            fileRef,
+            current =>
+            {
+                var extracted = ExtractFileContent(current.Document);
+                var nextContent = ApplyDeterministicTextEdits(extracted.Content, edits);
+                var nextEnvelope = BuildFileEnvelope(current.Document, extracted.ContentType, nextContent);
+                return MemNet.Client.FileUpdate.FromWrite(
+                    new MemNet.Client.ReplaceDocumentRequest(nextEnvelope, reason));
+            },
+            serviceId: serviceId,
+            maxConflictRetries: maxConflictRetries,
+            cancellationToken: cancellationToken);
+
+        var updatedExtracted = ExtractFileContent(updated.Document);
+        return new MemoryFile(path, updatedExtracted.ContentType, updatedExtracted.Content, updated.ETag);
+    }
+
     public Task<MemNet.Client.ForgetUserResult> ForgetUserAsync(MemNet.Client.MemNetScope scope, CancellationToken cancellationToken = default)
     {
         return _client.ForgetUserAsync(scope, cancellationToken);
     }
 
-    private (MemorySlotPolicy Slot, MemNet.Client.DocumentRef Document) ResolveSlot(
+    private static (string ContentType, string Content) ExtractFileContent(MemNet.Client.DocumentEnvelope envelope)
+    {
+        var contentType = envelope.Content["content_type"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            contentType = "application/json";
+        }
+
+        var text = envelope.Content["text"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            return (contentType, text);
+        }
+
+        // Fallback for legacy envelopes that don't store text/content_type fields.
+        var fallback = JsonSerializer.Serialize(envelope.Content, new JsonSerializerOptions { WriteIndented = true });
+        return (contentType, fallback);
+    }
+
+    private static MemNet.Client.DocumentEnvelope BuildFileEnvelope(
+        MemNet.Client.DocumentEnvelope? existing,
+        string contentType,
+        string content)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var payload = new JsonObject
+        {
+            ["content_type"] = contentType,
+            ["text"] = content
+        };
+
+        if (existing is null)
+        {
+            return new MemNet.Client.DocumentEnvelope(
+                DocId: Guid.NewGuid().ToString("N"),
+                SchemaId: "memnet.file",
+                SchemaVersion: "1.0.0",
+                CreatedAt: now,
+                UpdatedAt: now,
+                UpdatedBy: "agent-memory",
+                Content: payload);
+        }
+
+        return existing with { Content = payload };
+    }
+
+    private static void GuardPatchEdits(IReadOnlyList<MemoryPatchEdit> edits)
+    {
+        if (edits.Count == 0)
+        {
+            throw new MemNet.Client.MemNetException("memory_patch_file requires at least one edit.");
+        }
+
+        if (edits.Any(x => string.IsNullOrEmpty(x.OldText)))
+        {
+            throw new MemNet.Client.MemNetException("memory_patch_file edit old_text must not be empty.");
+        }
+    }
+
+    private static string ApplyDeterministicTextEdits(string input, IReadOnlyList<MemoryPatchEdit> edits)
+    {
+        var output = input;
+        foreach (var edit in edits)
+        {
+            var matches = FindMatchIndexes(output, edit.OldText);
+            if (matches.Count == 0)
+            {
+                throw new MemNet.Client.MemNetException("memory_patch_file failed: old_text not found.");
+            }
+
+            int matchIndex;
+            if (edit.Occurrence.HasValue)
+            {
+                if (edit.Occurrence.Value <= 0 || edit.Occurrence.Value > matches.Count)
+                {
+                    throw new MemNet.Client.MemNetException("memory_patch_file failed: occurrence is out of range.");
+                }
+
+                matchIndex = matches[edit.Occurrence.Value - 1];
+            }
+            else
+            {
+                if (matches.Count > 1)
+                {
+                    throw new MemNet.Client.MemNetException("memory_patch_file failed: old_text is ambiguous; provide occurrence.");
+                }
+
+                matchIndex = matches[0];
+            }
+
+            output = output.Remove(matchIndex, edit.OldText.Length).Insert(matchIndex, edit.NewText);
+        }
+
+        return output;
+    }
+
+    private static List<int> FindMatchIndexes(string content, string needle)
+    {
+        var indexes = new List<int>();
+        var start = 0;
+        while (start <= content.Length - needle.Length)
+        {
+            var index = content.IndexOf(needle, start, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                break;
+            }
+
+            indexes.Add(index);
+            start = index + needle.Length;
+        }
+
+        return indexes;
+    }
+
+    private (MemorySlotPolicy Slot, MemNet.Client.FileRef File) ResolveSlot(
         string slotId,
         IReadOnlyDictionary<string, string>? templateVariables)
     {
@@ -174,7 +381,7 @@ public sealed class AgentMemory
         }
 
         var path = ResolveSlotPath(slot, templateVariables);
-        return (slot, new MemNet.Client.DocumentRef(slot.Namespace, path));
+        return (slot, new MemNet.Client.FileRef(path));
     }
 
     private static string ResolveSlotPath(MemorySlotPolicy slot, IReadOnlyDictionary<string, string>? templateVariables)

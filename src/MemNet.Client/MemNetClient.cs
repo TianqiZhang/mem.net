@@ -60,27 +60,27 @@ public sealed class MemNetClient : IDisposable
         return await DeserializeAsync<ServiceStatusResponse>(response, cancellationToken);
     }
 
-    public async Task<DocumentReadResult> GetDocumentAsync(MemNetScope scope, DocumentRef document, CancellationToken cancellationToken = default)
+    public async Task<FileReadResult> GetFileAsync(MemNetScope scope, FileRef file, CancellationToken cancellationToken = default)
     {
-        var route = BuildDocumentRoute(scope, document);
+        var route = BuildFileRoute(scope, file);
         using var response = await SendWithRetriesAsync(
             () => new HttpRequestMessage(HttpMethod.Get, route),
             allowRetry: true,
             cancellationToken);
 
         await EnsureSuccessAsync(response, cancellationToken);
-        return await DeserializeAsync<DocumentReadResult>(response, cancellationToken);
+        return await DeserializeAsync<FileReadResult>(response, cancellationToken);
     }
 
-    public async Task<DocumentMutationResult> PatchDocumentAsync(
+    public async Task<FileMutationResult> PatchFileAsync(
         MemNetScope scope,
-        DocumentRef document,
+        FileRef file,
         PatchDocumentRequest request,
         string ifMatch,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
-        var route = BuildDocumentRoute(scope, document);
+        var route = BuildFileRoute(scope, file);
         using var response = await SendWithRetriesAsync(
             () =>
             {
@@ -96,18 +96,18 @@ public sealed class MemNetClient : IDisposable
             cancellationToken);
 
         await EnsureSuccessAsync(response, cancellationToken);
-        return await DeserializeAsync<DocumentMutationResult>(response, cancellationToken);
+        return await DeserializeAsync<FileMutationResult>(response, cancellationToken);
     }
 
-    public async Task<DocumentMutationResult> ReplaceDocumentAsync(
+    public async Task<FileMutationResult> WriteFileAsync(
         MemNetScope scope,
-        DocumentRef document,
+        FileRef file,
         ReplaceDocumentRequest request,
         string ifMatch,
         string? serviceId = null,
         CancellationToken cancellationToken = default)
     {
-        var route = BuildDocumentRoute(scope, document);
+        var route = BuildFileRoute(scope, file);
         using var response = await SendWithRetriesAsync(
             () =>
             {
@@ -123,7 +123,7 @@ public sealed class MemNetClient : IDisposable
             cancellationToken);
 
         await EnsureSuccessAsync(response, cancellationToken);
-        return await DeserializeAsync<DocumentMutationResult>(response, cancellationToken);
+        return await DeserializeAsync<FileMutationResult>(response, cancellationToken);
     }
 
     public async Task<AssembleContextResponse> AssembleContextAsync(MemNetScope scope, AssembleContextRequest request, CancellationToken cancellationToken = default)
@@ -338,11 +338,10 @@ public sealed class MemNetClient : IDisposable
         }
     }
 
-    private static string BuildDocumentRoute(MemNetScope scope, DocumentRef document)
+    private static string BuildFileRoute(MemNetScope scope, FileRef file)
     {
-        var encodedNamespace = EncodeSegment(document.Namespace);
-        var encodedPath = EncodePath(document.Path);
-        return BuildScopeRoute(scope, $"/documents/{encodedNamespace}/{encodedPath}");
+        var encodedPath = EncodePath(file.Path);
+        return BuildScopeRoute(scope, $"/files/{encodedPath}");
     }
 
     private static string BuildScopeRoute(MemNetScope scope, string suffix)

@@ -145,16 +145,16 @@
 
 ### 17B - API Simplification First (Service)
 - [x] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API (legacy `/documents/{**path}` alias retained temporarily for SDK migration)
-- [-] Remove public `namespace` concept from service contracts/domain models/audit records (domain/storage/audit complete; request/response contract cleanup pending)
-- [ ] Change `context:assemble` request/response from `documents[]` to path-only `files[]`
+- [x] Remove public `namespace` concept from service contracts/domain models/audit records (legacy `/documents/{**path}` alias retained temporarily)
+- [x] Change `context:assemble` request/response from `documents[]` to path-only `files[]`
 - [ ] Implement deterministic text patch (`old_text`/`new_text`/`occurrence`) for file API
-- [ ] Keep events/search/lifecycle behavior unchanged
+- [x] Keep events/search/lifecycle behavior unchanged
 
 ### 17C - SDK Refactor Second
-- [ ] Refactor `MemNet.Client` to path-only file primitives (`load/write/patch`)
-- [ ] Remove namespace-based document references from public SDK surface
-- [ ] Add high-level 4-tool facade in `MemNet.AgentMemory` matching LLM tool contract exactly
-- [ ] Keep optional slot/policy helper APIs app-facing while file tools are primary
+- [x] Refactor `MemNet.Client` to path-only file primitives (`load/write/patch`)
+- [x] Remove namespace-based document references from public SDK surface
+- [x] Add high-level 4-tool facade in `MemNet.AgentMemory` matching LLM tool contract exactly
+- [x] Keep optional slot/policy helper APIs app-facing while file tools are primary
 
 ### 17D - Test Hardening and Validation
 - [ ] Update all existing service+SDK tests to new `/files` + path-only contracts

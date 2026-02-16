@@ -4,11 +4,11 @@ namespace MemNet.Client;
 
 public static class MemNetClientConcurrencyExtensions
 {
-    public static async Task<DocumentMutationResult> UpdateWithRetryAsync(
+    public static async Task<FileMutationResult> UpdateWithRetryAsync(
         this MemNetClient client,
         MemNetScope scope,
-        DocumentRef document,
-        Func<DocumentReadResult, DocumentUpdate> updateFactory,
+        FileRef file,
+        Func<FileReadResult, FileUpdate> updateFactory,
         string? serviceId = null,
         int maxConflictRetries = 3,
         CancellationToken cancellationToken = default)
@@ -30,21 +30,21 @@ public static class MemNetClientConcurrencyExtensions
 
         for (var attempt = 0; attempt <= maxConflictRetries; attempt++)
         {
-            var current = await client.GetDocumentAsync(scope, document, cancellationToken);
+            var current = await client.GetFileAsync(scope, file, cancellationToken);
             var update = updateFactory(current);
             try
             {
                 if (update.Patch is not null)
                 {
-                    return await client.PatchDocumentAsync(scope, document, update.Patch, current.ETag, serviceId, cancellationToken);
+                    return await client.PatchFileAsync(scope, file, update.Patch, current.ETag, serviceId, cancellationToken);
                 }
 
-                if (update.Replace is not null)
+                if (update.Write is not null)
                 {
-                    return await client.ReplaceDocumentAsync(scope, document, update.Replace, current.ETag, serviceId, cancellationToken);
+                    return await client.WriteFileAsync(scope, file, update.Write, current.ETag, serviceId, cancellationToken);
                 }
 
-                throw new MemNetException("DocumentUpdate must provide either patch or replace request.");
+                throw new MemNetException("FileUpdate must provide either patch or write request.");
             }
             catch (MemNetApiException ex) when (
                 ex.StatusCode == HttpStatusCode.PreconditionFailed
@@ -55,31 +55,31 @@ public static class MemNetClientConcurrencyExtensions
             }
         }
 
-        throw new MemNetException($"Failed to update document after {maxConflictRetries + 1} attempts due to repeated ETag conflicts.");
+        throw new MemNetException($"Failed to update file after {maxConflictRetries + 1} attempts due to repeated ETag conflicts.");
     }
 }
 
-public sealed record DocumentUpdate(
+public sealed record FileUpdate(
     PatchDocumentRequest? Patch,
-    ReplaceDocumentRequest? Replace)
+    ReplaceDocumentRequest? Write)
 {
-    public static DocumentUpdate FromPatch(PatchDocumentRequest patch)
+    public static FileUpdate FromPatch(PatchDocumentRequest patch)
     {
         if (patch is null)
         {
             throw new ArgumentNullException(nameof(patch));
         }
 
-        return new DocumentUpdate(patch, null);
+        return new FileUpdate(patch, null);
     }
 
-    public static DocumentUpdate FromReplace(ReplaceDocumentRequest replace)
+    public static FileUpdate FromWrite(ReplaceDocumentRequest write)
     {
-        if (replace is null)
+        if (write is null)
         {
-            throw new ArgumentNullException(nameof(replace));
+            throw new ArgumentNullException(nameof(write));
         }
 
-        return new DocumentUpdate(null, replace);
+        return new FileUpdate(null, write);
     }
 }

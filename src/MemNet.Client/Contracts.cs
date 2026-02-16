@@ -6,7 +6,7 @@ namespace MemNet.Client;
 
 public sealed record MemNetScope(string TenantId, string UserId);
 
-public sealed record DocumentRef(string Namespace, string Path);
+public sealed record FileRef(string Path);
 
 public sealed record ServiceStatusResponse(string Service, string Status);
 
@@ -36,40 +36,37 @@ public sealed record ReplaceDocumentRequest(
     string Reason,
     EvidenceRef? Evidence = null);
 
-public sealed record DocumentMutationResult(
+public sealed record FileMutationResult(
     [property: JsonPropertyName("etag")]
     string ETag,
     DocumentEnvelope Document);
 
-public sealed record DocumentReadResult(
+public sealed record FileReadResult(
     [property: JsonPropertyName("etag")]
     string ETag,
     DocumentEnvelope Document);
 
 public sealed record AssembleContextRequest(
-    IReadOnlyList<AssembleDocumentRef> Documents,
+    IReadOnlyList<AssembleFileRef> Files,
     int? MaxDocs = null,
     int? MaxCharsTotal = null);
 
-public sealed record AssembleDocumentRef(
-    string Namespace,
+public sealed record AssembleFileRef(
     string Path);
 
-public sealed record DroppedDocument(
-    string Namespace,
+public sealed record DroppedFile(
     string Path,
     string Reason);
 
-public sealed record AssembledDocument(
-    string Namespace,
+public sealed record AssembledFile(
     string Path,
     [property: JsonPropertyName("etag")]
     string ETag,
     DocumentEnvelope Document);
 
 public sealed record AssembleContextResponse(
-    IReadOnlyList<AssembledDocument> Documents,
-    IReadOnlyList<DroppedDocument> DroppedDocuments);
+    IReadOnlyList<AssembledFile> Files,
+    IReadOnlyList<DroppedFile> DroppedFiles);
 
 public sealed record EventEvidence(
     IReadOnlyList<string> MessageIds,

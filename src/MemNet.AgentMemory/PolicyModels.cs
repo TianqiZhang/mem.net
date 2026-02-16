@@ -16,7 +16,6 @@ public sealed record AgentMemoryPolicy(
 
 public sealed record MemorySlotPolicy(
     string SlotId,
-    string Namespace,
     string? Path,
     string? PathTemplate,
     bool LoadByDefault = false,

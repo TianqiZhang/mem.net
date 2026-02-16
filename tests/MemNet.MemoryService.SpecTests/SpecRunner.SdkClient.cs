@@ -13,12 +13,12 @@ internal sealed partial class SpecRunner
         });
 
         var memScope = new MemNet.Client.MemNetScope(scope.Keys.Tenant, scope.Keys.User);
-        var docRef = new MemNet.Client.DocumentRef("user", "long_term_memory.json");
+        var fileRef = new MemNet.Client.FileRef("user/long_term_memory.json");
 
-        var before = await client.GetDocumentAsync(memScope, docRef);
-        var patched = await client.PatchDocumentAsync(
+        var before = await client.GetFileAsync(memScope, fileRef);
+        var patched = await client.PatchFileAsync(
             memScope,
-            docRef,
+            fileRef,
             new MemNet.Client.PatchDocumentRequest(
                 Ops:
                 [
@@ -42,12 +42,12 @@ internal sealed partial class SpecRunner
         });
 
         var memScope = new MemNet.Client.MemNetScope(scope.Keys.Tenant, scope.Keys.User);
-        var docRef = new MemNet.Client.DocumentRef("user", "long_term_memory.json");
+        var fileRef = new MemNet.Client.FileRef("user/long_term_memory.json");
 
-        var before = await client.GetDocumentAsync(memScope, docRef);
-        await client.PatchDocumentAsync(
+        var before = await client.GetFileAsync(memScope, fileRef);
+        await client.PatchFileAsync(
             memScope,
-            docRef,
+            fileRef,
             new MemNet.Client.PatchDocumentRequest(
                 Ops:
                 [
@@ -58,9 +58,9 @@ internal sealed partial class SpecRunner
 
         try
         {
-            await client.PatchDocumentAsync(
+            await client.PatchFileAsync(
                 memScope,
-                docRef,
+                fileRef,
                 new MemNet.Client.PatchDocumentRequest(
                     Ops:
                     [
@@ -93,16 +93,16 @@ internal sealed partial class SpecRunner
         var assembled = await client.AssembleContextAsync(
             memScope,
             new MemNet.Client.AssembleContextRequest(
-                Documents:
+                Files:
                 [
-                    new MemNet.Client.AssembleDocumentRef("user", "profile.json"),
-                    new MemNet.Client.AssembleDocumentRef("user", "long_term_memory.json")
+                    new MemNet.Client.AssembleFileRef("user/profile.json"),
+                    new MemNet.Client.AssembleFileRef("user/long_term_memory.json")
                 ],
                 MaxDocs: 4,
                 MaxCharsTotal: 30000));
 
-        Assert.Equal(2, assembled.Documents.Count);
-        Assert.Equal(0, assembled.DroppedDocuments.Count);
+        Assert.Equal(2, assembled.Files.Count);
+        Assert.Equal(0, assembled.DroppedFiles.Count);
 
         await client.WriteEventAsync(
             memScope,

@@ -110,10 +110,10 @@ internal sealed partial class SpecRunner
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
             new
             {
-                documents = new[]
+                files = new[]
                 {
-                    new { @namespace = "user", path = "profile.json" },
-                    new { @namespace = "user", path = "long_term_memory.json" }
+                    new { path = "user/profile.json" },
+                    new { path = "user/long_term_memory.json" }
                 },
                 max_docs = 4,
                 max_chars_total = 30000
@@ -122,10 +122,10 @@ internal sealed partial class SpecRunner
         Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
         var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
             ?? throw new Exception("Expected context response.");
-        var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
+        var contextDocs = contextBody["files"] as JsonArray ?? throw new Exception("Expected files array.");
         Assert.Equal(2, contextDocs.Count);
 
-        var droppedDocs = contextBody["dropped_documents"] as JsonArray ?? throw new Exception("Expected dropped_documents array.");
+        var droppedDocs = contextBody["dropped_files"] as JsonArray ?? throw new Exception("Expected dropped_files array.");
         Assert.Equal(0, droppedDocs.Count);
     }
 
@@ -139,10 +139,10 @@ internal sealed partial class SpecRunner
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
             new
             {
-                documents = new[]
+                files = new[]
                 {
-                    new { @namespace = "user", path = "profile.json" },
-                    new { @namespace = "user", path = "long_term_memory.json" }
+                    new { path = "user/profile.json" },
+                    new { path = "user/long_term_memory.json" }
                 },
                 max_docs = 4,
                 max_chars_total = 30000
@@ -151,10 +151,10 @@ internal sealed partial class SpecRunner
         Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
         var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
             ?? throw new Exception("Expected context response.");
-        var contextDocs = contextBody["documents"] as JsonArray ?? throw new Exception("Expected documents array.");
+        var contextDocs = contextBody["files"] as JsonArray ?? throw new Exception("Expected files array.");
         Assert.Equal(2, contextDocs.Count);
 
-        var droppedDocs = contextBody["dropped_documents"] as JsonArray ?? throw new Exception("Expected dropped_documents array.");
+        var droppedDocs = contextBody["dropped_files"] as JsonArray ?? throw new Exception("Expected dropped_files array.");
         Assert.Equal(0, droppedDocs.Count);
     }
 

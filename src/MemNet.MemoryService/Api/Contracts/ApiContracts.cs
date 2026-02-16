@@ -18,26 +18,23 @@ public sealed record EvidenceRef(
     string? SnapshotUri);
 
 public sealed record AssembleContextRequest(
-    IReadOnlyList<AssembleDocumentRef> Documents,
+    IReadOnlyList<AssembleFileRef> Files,
     int? MaxDocs,
     int? MaxCharsTotal);
 
-public sealed record AssembleDocumentRef(
-    string Namespace,
+public sealed record AssembleFileRef(
     string Path);
 
 public sealed record AssembleContextResponse(
-    IReadOnlyList<AssembledDocument> Documents,
-    IReadOnlyList<DroppedDocument> DroppedDocuments);
+    IReadOnlyList<AssembledFile> Files,
+    IReadOnlyList<DroppedFile> DroppedFiles);
 
-public sealed record AssembledDocument(
-    string Namespace,
+public sealed record AssembledFile(
     string Path,
     string ETag,
     DocumentEnvelope Document);
 
-public sealed record DroppedDocument(
-    string Namespace,
+public sealed record DroppedFile(
     string Path,
     string Reason);
 

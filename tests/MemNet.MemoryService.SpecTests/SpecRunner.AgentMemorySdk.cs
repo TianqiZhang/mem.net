@@ -19,8 +19,7 @@ internal sealed partial class SpecRunner
             [
                 new MemNet.AgentMemory.MemorySlotPolicy(
                     SlotId: "profile",
-                    Namespace: "user",
-                    Path: "profile.json",
+                    Path: "user/profile.json",
                     PathTemplate: null,
                     LoadByDefault: true,
                     PatchRules: new MemNet.AgentMemory.SlotPatchRules(
@@ -28,17 +27,15 @@ internal sealed partial class SpecRunner
                         RequiredContentPaths: ["/profile"])),
                 new MemNet.AgentMemory.MemorySlotPolicy(
                     SlotId: "long_term_memory",
-                    Namespace: "user",
-                    Path: "long_term_memory.json",
+                    Path: "user/long_term_memory.json",
                     PathTemplate: null,
                     LoadByDefault: true,
                     PatchRules: new MemNet.AgentMemory.SlotPatchRules(
                         AllowedPaths: ["/preferences", "/durable_facts", "/pending_confirmations"])),
                 new MemNet.AgentMemory.MemorySlotPolicy(
                     SlotId: "project",
-                    Namespace: "projects",
                     Path: null,
-                    PathTemplate: "{project_id}.json",
+                    PathTemplate: "projects/{project_id}.json",
                     LoadByDefault: false)
             ]);
 
@@ -87,8 +84,7 @@ internal sealed partial class SpecRunner
             [
                 new MemNet.AgentMemory.MemorySlotPolicy(
                     SlotId: "long_term_memory",
-                    Namespace: "user",
-                    Path: "long_term_memory.json",
+                    Path: "user/long_term_memory.json",
                     PathTemplate: null,
                     LoadByDefault: true,
                     PatchRules: new MemNet.AgentMemory.SlotPatchRules(
@@ -139,20 +135,20 @@ internal sealed partial class SpecRunner
         });
 
         var memScope = new MemNet.Client.MemNetScope(scope.Keys.Tenant, scope.Keys.User);
-        var docRef = new MemNet.Client.DocumentRef("user", "long_term_memory.json");
+        var fileRef = new MemNet.Client.FileRef("user/long_term_memory.json");
         var injectedConflict = false;
 
         var updated = await client.UpdateWithRetryAsync(
             memScope,
-            docRef,
+            fileRef,
             current =>
             {
                 if (!injectedConflict)
                 {
                     injectedConflict = true;
-                    client.PatchDocumentAsync(
+                    client.PatchFileAsync(
                         memScope,
-                        docRef,
+                        fileRef,
                         new MemNet.Client.PatchDocumentRequest(
                             Ops:
                             [
@@ -162,7 +158,7 @@ internal sealed partial class SpecRunner
                         current.ETag).GetAwaiter().GetResult();
                 }
 
-                return MemNet.Client.DocumentUpdate.FromPatch(
+                return MemNet.Client.FileUpdate.FromPatch(
                     new MemNet.Client.PatchDocumentRequest(
                         Ops:
                         [
@@ -174,5 +170,41 @@ internal sealed partial class SpecRunner
 
         Assert.True(injectedConflict, "Expected conflict injection to execute.");
         Assert.Equal("final", updated.Document.Content["preferences"]?[0]?.GetValue<string>());
+    }
+
+    private static async Task AgentMemoryFileToolFlowWorksAsync()
+    {
+        using var scope = TestScope.Create();
+        using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
+        using var client = new MemNet.Client.MemNetClient(new MemNet.Client.MemNetClientOptions
+        {
+            BaseAddress = host.BaseAddress,
+            ServiceId = "agent-sdk-tests"
+        });
+
+        var policy = new MemNet.AgentMemory.AgentMemoryPolicy(
+            PolicyId: "learn-companion-default",
+            Slots: []);
+
+        var agentMemory = new MemNet.AgentMemory.AgentMemory(client, policy);
+        var memScope = new MemNet.Client.MemNetScope(scope.Keys.Tenant, scope.Keys.User);
+        var path = "user/notes.md";
+
+        await agentMemory.MemoryWriteFileAsync(
+            memScope,
+            path,
+            "## Notes\n- line one\n");
+
+        await agentMemory.MemoryPatchFileAsync(
+            memScope,
+            path,
+            [
+                new MemNet.AgentMemory.MemoryPatchEdit(
+                    OldText: "## Notes\n- line one\n",
+                    NewText: "## Notes\n- line one\n- line two\n")
+            ]);
+
+        var loaded = await agentMemory.MemoryLoadFileAsync(memScope, path);
+        Assert.True(loaded.Content.Contains("line two", StringComparison.Ordinal), "Expected patched markdown content.");
     }
 }

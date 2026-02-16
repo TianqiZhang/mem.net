@@ -27,11 +27,11 @@ public sealed record PrepareTurnRequest(
 public sealed record PreparedMemory(
     IReadOnlyList<PreparedSlotDocument> Documents,
     IReadOnlyList<MemNet.Client.EventDigest> Events,
-    IReadOnlyList<MemNet.Client.DroppedDocument> DroppedDocuments);
+    IReadOnlyList<MemNet.Client.DroppedFile> DroppedFiles);
 
 public sealed record PreparedSlotDocument(
     string? SlotId,
-    MemNet.Client.DocumentRef Document,
+    MemNet.Client.FileRef File,
     string ETag,
     MemNet.Client.DocumentEnvelope Envelope);
 
@@ -57,3 +57,14 @@ public sealed record RecallRequest(
     DateTimeOffset? To = null);
 
 public sealed record RememberRequest(MemNet.Client.EventDigest Event);
+
+public sealed record MemoryFile(
+    string Path,
+    string ContentType,
+    string Content,
+    string ETag);
+
+public sealed record MemoryPatchEdit(
+    string OldText,
+    string NewText,
+    int? Occurrence = null);
