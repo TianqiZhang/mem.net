@@ -113,7 +113,7 @@
 - [x] Add explicit v1 -> v2 compatibility mapping in both specs
 
 ## Phase 15 - Service v2 Migration
-- [ ] Refactor runtime checks into service-core guards vs policy-dependent checks
+- [x] Refactor runtime checks into service-core guards vs policy-dependent checks
 - [ ] Add v2 request contracts without `policy_id`/`binding_id`
 - [ ] Keep v1 request compatibility during migration window
 - [ ] Migrate `context:assemble` to explicit document refs

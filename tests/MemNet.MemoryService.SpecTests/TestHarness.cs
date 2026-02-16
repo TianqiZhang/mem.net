@@ -116,11 +116,12 @@ internal sealed class TestScope : IDisposable
         var eventStore = new FileEventStore(options);
         var auditStore = new FileAuditStore(options);
         var policy = new PolicyRegistry(options);
+        var policyRules = new PolicyRuntimeRules(policy);
         var coordinator = new MemoryCoordinator(
             documentStore,
             eventStore,
             auditStore,
-            policy,
+            policyRules,
             NullLogger<MemoryCoordinator>.Instance);
 
         var keys = new TestKeys("tenant-1", "user-1");

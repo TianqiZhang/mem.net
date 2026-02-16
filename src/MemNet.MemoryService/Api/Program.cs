@@ -26,6 +26,7 @@ builder.Services.AddSingleton<IMemoryBackend>(backend);
 backend.RegisterServices(builder.Services, builder.Configuration);
 
 builder.Services.AddSingleton<PolicyRegistry>();
+builder.Services.AddSingleton<PolicyRuntimeRules>();
 builder.Services.AddSingleton<MemoryCoordinator>();
 builder.Services.AddSingleton<ReplayService>();
 builder.Services.AddSingleton<DataLifecycleService>();
