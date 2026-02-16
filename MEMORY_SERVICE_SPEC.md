@@ -1,7 +1,7 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Active (v1), v2 migration in progress  
+Status: Active v2 (with v1 compatibility window)  
 Version: 2.0 (target)  
 Last Updated: February 16, 2026
 
@@ -322,9 +322,12 @@ Policy, slot mapping, and schema/path guardrails live in SDK/application layers.
 - replay/reindex background orchestration
 - multi-document transaction semantics
 
-## 18. Acceptance Criteria (v2 Target)
+## 18. Acceptance Criteria (v2)
 1. Service API supports policy-free document mutation flows.
 2. ETag conflict semantics remain unchanged and explicit.
 3. Context assembly is explicit-doc based and deterministic.
 4. Event write/search and lifecycle endpoints remain functional.
 5. SDK/application can own memory semantics without server coupling.
+
+## 19. Implementation Status
+Current implementation satisfies v2 acceptance criteria while maintaining v1 request-shape compatibility for transition.

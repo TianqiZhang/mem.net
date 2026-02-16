@@ -4,30 +4,32 @@
 ![.NET 8](https://img.shields.io/badge/.NET-8-512BD4)
 ![Provider](https://img.shields.io/badge/provider-filesystem%20%7C%20azure-0A7EA4)
 
-Policy-driven memory service for multi-agent systems.
+Composable memory infrastructure for multi-agent systems.
 
-`mem.net` gives agents a shared, durable memory API with strict write guardrails, optimistic concurrency, deterministic context assembly, and lifecycle cleanup.
+`mem.net` gives agents a shared, durable memory API with optimistic concurrency, deterministic context assembly, event recall, and lifecycle cleanup.
+Application-specific memory semantics (categories, slot rules, schemas) are owned by SDK/application code.
 
 ## Why mem.net
 
 - Keep memory durable and auditable across sessions and agents.
-- Avoid hard-coded memory categories by using `policy.json`.
-- Prevent unsafe writes with binding-level path and size constraints.
-- Keep runtime behavior predictable with ETag concurrency and deterministic assembly.
+- Keep the service generic while letting apps define memory semantics in SDK policy config.
+- Preserve conflict-safe writes with ETag optimistic concurrency.
+- Keep runtime behavior deterministic with explicit document assembly inputs.
 
-## Core Capabilities (v1)
+## Core Capabilities (v2 + v1 compatibility)
 
 - Document read/patch/replace with ETag optimistic concurrency.
-- Context assembly for deterministic base memory with budget controls.
+- Context assembly from explicit document refs with budget controls.
 - Event digest write/search.
 - Retention and forget-user lifecycle operations.
+- Compatibility window for v1 request shapes (`policy_id`, `binding_id`) while migrating clients.
 - Pluggable provider mode:
   - `filesystem` (default local mode)
   - `azure` (Blob + optional AI Search, build-flag gated)
 
-## Default Starter Policy
+## SDK Policy Pattern
 
-The default `policy.json` models a practical learn-companion memory shape:
+`mem.net` service is generic. Recommended memory categories live in SDK policy config.
 
 - `user/profile.json`
   - key user info
@@ -39,7 +41,7 @@ The default `policy.json` models a practical learn-companion memory shape:
 - event digests
   - write + search across conversations and related services
 
-Context assembly default behavior:
+Typical agent context behavior:
 - includes `profile.json` and `long_term_memory.json`
 - excludes templated project docs (load them on demand via document APIs)
 - event digests are retrieved via `POST /events:search` by the caller
@@ -95,7 +97,8 @@ Expected response:
 
 ## Configuration
 
-Runtime behavior is driven by `src/MemNet.MemoryService/Policy/policy.json`.
+Runtime storage/provider behavior is configured via environment variables.
+`src/MemNet.MemoryService/Policy/policy.json` is currently still used for v1 compatibility mode.
 
 ### Key environment variables
 
@@ -167,13 +170,77 @@ Recommended deployment order:
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Read document |
-| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Patch document (`If-Match` required) |
-| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Replace document (restricted by `write_mode`) |
-| `POST` | `/v1/tenants/{tenantId}/users/{userId}/context:assemble` | Assemble runtime memory context |
+| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Patch document (`If-Match` required, v2 shape without `policy_id`) |
+| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/documents/{namespace}/{path}` | Replace document (`If-Match` required, v2 shape without `policy_id`) |
+| `POST` | `/v1/tenants/{tenantId}/users/{userId}/context:assemble` | Assemble explicit document refs |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events` | Write event digest |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events:search` | Search event digests |
-| `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention (`policy_id`) |
+| `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention (explicit day values in v2) |
 | `DELETE` | `/v1/tenants/{tenantId}/users/{userId}/memory` | Forget all user memory |
+
+v1 compatibility note:
+- `PATCH`/`PUT` still accept `policy_id` + `binding_id`.
+- `context:assemble` still accepts `policy_id`.
+- `retention:apply` still accepts `policy_id`.
+
+## SDK Quickstart (.NET)
+
+### Low-level client (`MemNet.Client`)
+
+```csharp
+using MemNet.Client;
+
+var client = new MemNetClient(new MemNetClientOptions
+{
+    BaseAddress = new Uri("http://localhost:5071"),
+    ServiceId = "learn-companion"
+});
+
+var scope = new MemNetScope("tenant-1", "user-1");
+var profileRef = new DocumentRef("user", "profile.json");
+
+var current = await client.GetDocumentAsync(scope, profileRef);
+var updated = await client.PatchDocumentAsync(
+    scope,
+    profileRef,
+    new PatchDocumentRequest(
+        Ops:
+        [
+            new PatchOperation("add", "/content/projects/-", "mem.net")
+        ],
+        Reason: "project_update"),
+    ifMatch: current.ETag);
+```
+
+### High-level agent facade (`MemNet.AgentMemory`)
+
+```csharp
+using MemNet.AgentMemory;
+using MemNet.Client;
+
+var policy = new AgentMemoryPolicy(
+    "learn-companion-default",
+    [
+        new MemorySlotPolicy("profile", "user", "profile.json", null, LoadByDefault: true),
+        new MemorySlotPolicy("long_term_memory", "user", "long_term_memory.json", null, LoadByDefault: true),
+        new MemorySlotPolicy("project", "projects", null, "{project_id}.json", LoadByDefault: false)
+    ]);
+
+using var client = new MemNetClient(new MemNetClientOptions
+{
+    BaseAddress = new Uri("http://localhost:5071"),
+    ServiceId = "learn-companion"
+});
+
+var memory = new AgentMemory(client, policy);
+var scope = new MemNetScope("tenant-1", "user-1");
+
+var prepared = await memory.PrepareTurnAsync(
+    scope,
+    new PrepareTurnRequest(
+        RecallQuery: "recent project decisions",
+        RecallTopK: 8));
+```
 
 ## Testing and CI
 
@@ -186,11 +253,14 @@ Recommended deployment order:
 ## Repository Map
 
 - `MEMORY_SERVICE_SPEC.md` - technical spec aligned with current implementation.
+- `SDK_SPEC.md` - SDK technical spec for `MemNet.Client` and `MemNet.AgentMemory`.
 - `src/MemNet.MemoryService/Api` - HTTP entrypoint and endpoint wiring.
 - `src/MemNet.MemoryService/Application` - orchestration services (`MemoryCoordinator`, lifecycle, replay).
 - `src/MemNet.MemoryService/Domain` - core models, errors, and patch engine.
 - `src/MemNet.MemoryService/Policy` - `PolicyRegistry` and default `policy.json`.
 - `src/MemNet.MemoryService/Backends` - store abstractions and provider implementations.
+- `src/MemNet.Client` - low-level .NET SDK for mem.net endpoints.
+- `src/MemNet.AgentMemory` - high-level agent memory SDK facade.
 - `tools/MemNet.Bootstrap` - deployment/bootstrap tool for Azure containers and AI Search index.
 - `infra/search/events-index.schema.json` - source-controlled schema for event search index.
 - `tests/MemNet.MemoryService.SpecTests` - executable specification tests.

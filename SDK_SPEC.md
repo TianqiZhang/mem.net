@@ -1,7 +1,7 @@
 # mem.net SDK Technical Specification
 
 Project: `mem.net` SDK  
-Status: Draft v0.2  
+Status: Active v1 implementation  
 Last Updated: February 16, 2026
 
 ## 1. Purpose
@@ -236,3 +236,9 @@ Target steady state: v2 native only.
 4. Typed exceptions include service `code` and `request_id`.
 5. Concurrency helper is deterministic and bounded.
 6. Tests run offline against local harness.
+
+## 17. Implementation Status
+Current implementation includes:
+- `src/MemNet.Client` low-level endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
+- `src/MemNet.AgentMemory` high-level policy/slot facade for agent integration.
+- executable SDK contract coverage in `tests/MemNet.MemoryService.SpecTests`.

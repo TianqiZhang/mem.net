@@ -127,7 +127,7 @@
 - [x] Implement ETag conflict helper (`UpdateWithRetryAsync`) with bounded retries
 - [x] Implement high-level `AgentMemory` facade (`PrepareTurnAsync`, `RecallAsync`, `RememberAsync`)
 - [x] Add SDK contract tests against local service harness
-- [ ] Add SDK quickstart samples to `README.md`
+- [x] Add SDK quickstart samples to `README.md`
 
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
