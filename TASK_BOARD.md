@@ -37,7 +37,7 @@
 ## Phase 4 - Replay and Compaction Foundations
 - [x] Replay patch ingestion contract
 - [x] Conflict retry/rebase hook points
-- [ ] Compaction worker (deferred from runtime core)
+- [ ] Compaction worker (low priority, deferred from runtime core)
 
 ## Phase 5 - Testing and Quality
 - [x] Build executable spec test harness
@@ -70,10 +70,10 @@
 
 ## Phase 9 - Azure Testing and Validation
 - [x] Add integration check that azure provider returns `501` when SDK build flag is disabled
-- [ ] Add unit tests for Azure provider mapping and request shaping
-- [ ] Add provider-agnostic contract tests for document/event/audit stores
+- [x] Add unit tests for Azure provider mapping and request shaping
+- [x] Add provider-agnostic contract tests for document/event/audit stores
 - [x] Add optional live Azure integration test harness (env-gated)
-- [ ] Validate `filesystem` and `azure` providers against same acceptance scenarios
+- [-] Validate `filesystem` and `azure` providers against same acceptance scenarios (shared spec harness in place; live azure run pending env)
 - [ ] Run end-to-end manual API checks with `MEMNET_PROVIDER=azure`
 
 ## Phase 10 - Production Readiness
@@ -102,5 +102,7 @@
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)
-- [ ] Reintroduce compaction as optional background job with dedicated config
 - [ ] Add dedicated snapshot ingestion/store path beyond lifecycle cleanup hooks
+
+## Low-Priority Backlog
+- [ ] Reintroduce compaction as optional background job with dedicated config

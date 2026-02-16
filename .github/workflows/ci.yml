@@ -27,7 +27,7 @@ jobs:
         run: dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
 
   azure-build:
-    name: Azure SDK Compile Check
+    name: Azure SDK Build and Spec Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,7 +39,10 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore (Azure SDK enabled)
-        run: dotnet restore src/MemNet.MemoryService/MemNet.MemoryService.csproj -p:MemNetEnableAzureSdk=true --configfile NuGet.Config
+        run: dotnet restore tests/MemNet.MemoryService.SpecTests/MemNet.MemoryService.SpecTests.csproj -p:MemNetEnableAzureSdk=true --configfile NuGet.Config
 
       - name: Build (Azure SDK enabled)
-        run: dotnet build src/MemNet.MemoryService/MemNet.MemoryService.csproj -c Debug -p:MemNetEnableAzureSdk=true --no-restore
+        run: dotnet build tests/MemNet.MemoryService.SpecTests/MemNet.MemoryService.SpecTests.csproj -c Debug -p:MemNetEnableAzureSdk=true --no-restore
+
+      - name: Run spec tests (Azure SDK enabled)
+        run: dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll

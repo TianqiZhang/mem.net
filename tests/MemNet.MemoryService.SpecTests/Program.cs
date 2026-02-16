@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using MemNet.MemoryService.Core;
 using MemNet.MemoryService.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 var runner = new SpecRunner();
@@ -18,15 +19,22 @@ internal sealed class SpecRunner
     {
         _tests =
         [
+            FileStoreContractsAreConsistentAsync,
             PatchDocumentHappyPathAsync,
             PatchDocumentReturns412OnEtagMismatchAsync,
             PatchDocumentReturns422OnPathPolicyViolationAsync,
             AssembleContextIncludesDefaultDocsAndRespectsBudgetsAsync,
             EventSearchReturnsRelevantResultsAsync,
             HttpEndpointsWorkEndToEndAsync,
+#if !MEMNET_ENABLE_AZURE_SDK
             AzureProviderDisabledReturns501Async,
+#endif
             RetentionSweepRemovesExpiredEventsAsync,
             ForgetUserRemovesDocumentsAndEventsAsync,
+#if MEMNET_ENABLE_AZURE_SDK
+            AzureProviderOptionsMappingAndValidationAsync,
+            AzureSearchFilterRequestShapingAsync,
+#endif
             AzureLiveSmokeTestIfConfiguredAsync
         ];
     }
@@ -54,6 +62,129 @@ internal sealed class SpecRunner
         {
             Environment.ExitCode = 1;
         }
+    }
+
+    private static async Task FileStoreContractsAreConsistentAsync()
+    {
+        using var scope = TestScope.Create();
+        var options = new StorageOptions
+        {
+            DataRoot = scope.DataRoot,
+            ConfigRoot = scope.ConfigRoot
+        };
+
+        await RunDocumentStoreContractAsync(new FileDocumentStore(options));
+        await RunEventStoreContractAsync(new FileEventStore(options), scope.Keys.Tenant, scope.Keys.User);
+        await RunAuditStoreContractAsync(new FileAuditStore(options), options.DataRoot, scope.Keys.Tenant, scope.Keys.User);
+    }
+
+    private static async Task RunDocumentStoreContractAsync(IDocumentStore documentStore)
+    {
+        var key = new DocumentKey("tenant-contract", "user-contract", "user", "contract.json");
+        var now = DateTimeOffset.UtcNow;
+        var initial = new DocumentEnvelope(
+            DocId: "doc-contract",
+            SchemaId: "memory.contract",
+            SchemaVersion: "1.0.0",
+            CreatedAt: now,
+            UpdatedAt: now,
+            UpdatedBy: "spec-tests",
+            Content: new JsonObject { ["value"] = "v1" });
+
+        var created = await documentStore.UpsertAsync(key, initial, "*");
+        Assert.True(!string.IsNullOrWhiteSpace(created.ETag), "Document contract expected non-empty ETag.");
+        Assert.True(await documentStore.ExistsAsync(key), "Document contract expected ExistsAsync=true after create.");
+
+        var fetched = await documentStore.GetAsync(key) ?? throw new Exception("Document contract expected fetched document.");
+        Assert.Equal("v1", fetched.Envelope.Content["value"]?.GetValue<string>());
+
+        await Assert.ThrowsAsync<ApiException>(
+            async () =>
+            {
+                await documentStore.UpsertAsync(
+                    key,
+                    fetched.Envelope with { Content = new JsonObject { ["value"] = "v2-stale" } },
+                    ifMatch: "\"stale\"");
+            },
+            ex => ex.StatusCode == 412 && ex.Code == "ETAG_MISMATCH");
+
+        var updatedEnvelope = fetched.Envelope with
+        {
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Content = new JsonObject { ["value"] = "v2" }
+        };
+        var updated = await documentStore.UpsertAsync(key, updatedEnvelope, fetched.ETag);
+        Assert.True(!string.Equals(updated.ETag, fetched.ETag, StringComparison.Ordinal), "Document contract expected ETag change on update.");
+    }
+
+    private static async Task RunEventStoreContractAsync(IEventStore eventStore, string tenantId, string userId)
+    {
+        await eventStore.WriteAsync(new EventDigest(
+            EventId: "evt-contract-1",
+            TenantId: tenantId,
+            UserId: userId,
+            ServiceId: "contract-tests",
+            Timestamp: DateTimeOffset.UtcNow.AddMinutes(-5),
+            SourceType: "chat",
+            Digest: "Event contract baseline for retrieval latency.",
+            Keywords: ["retrieval", "latency"],
+            ProjectIds: ["project-contract"],
+            SnapshotUri: "blob://contract/1",
+            Evidence: new EventEvidence(["m1"], 1, 1)));
+
+        await eventStore.WriteAsync(new EventDigest(
+            EventId: "evt-contract-2",
+            TenantId: tenantId,
+            UserId: userId,
+            ServiceId: "contract-tests",
+            Timestamp: DateTimeOffset.UtcNow,
+            SourceType: "chat",
+            Digest: "Unrelated event digest.",
+            Keywords: ["general"],
+            ProjectIds: ["project-other"],
+            SnapshotUri: "blob://contract/2",
+            Evidence: new EventEvidence(["m2"], 1, 2)));
+
+        var filtered = await eventStore.QueryAsync(
+            tenantId,
+            userId,
+            new EventSearchRequest(
+                Query: "latency",
+                ServiceId: "contract-tests",
+                SourceType: "chat",
+                ProjectId: "project-contract",
+                From: null,
+                To: null,
+                TopK: 5));
+
+        Assert.True(filtered.Count == 1, "Event contract expected exactly one filtered event.");
+        Assert.Equal("evt-contract-1", filtered[0].EventId);
+    }
+
+    private static async Task RunAuditStoreContractAsync(
+        IAuditStore auditStore,
+        string dataRoot,
+        string tenantId,
+        string userId)
+    {
+        var record = new AuditRecord(
+            ChangeId: "chg-contract-1",
+            Actor: "contract-tests",
+            TenantId: tenantId,
+            UserId: userId,
+            Namespace: "user",
+            Path: "long_term_memory.json",
+            PreviousETag: "\"prev\"",
+            NewETag: "\"new\"",
+            Reason: "contract-check",
+            Ops: [new PatchOperation("replace", "/content/preferences/0", JsonValue.Create("contract"))],
+            Timestamp: DateTimeOffset.UtcNow,
+            EvidenceMessageIds: ["m-audit-1"]);
+
+        await auditStore.WriteAsync(record);
+
+        var expectedPath = Path.Combine(dataRoot, "tenants", tenantId, "users", userId, "audit", "chg-contract-1.json");
+        Assert.True(File.Exists(expectedPath), "Audit contract expected persisted audit file.");
     }
 
     private static async Task PatchDocumentHappyPathAsync()
@@ -319,6 +450,81 @@ internal sealed class SpecRunner
         Assert.True(results.Count >= 1, "Expected at least one event search result.");
     }
 
+#if MEMNET_ENABLE_AZURE_SDK
+    private static Task AzureProviderOptionsMappingAndValidationAsync()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["MemNet:Azure:StorageServiceUri"] = "https://example.blob.core.windows.net",
+                ["MemNet:Azure:DocumentsContainerName"] = "docs",
+                ["MemNet:Azure:EventsContainerName"] = "events",
+                ["MemNet:Azure:AuditContainerName"] = "audit",
+                ["MemNet:Azure:SearchEndpoint"] = "https://example.search.windows.net",
+                ["MemNet:Azure:SearchIndexName"] = "events-index",
+                ["MemNet:Azure:RetryMaxRetries"] = "5",
+                ["MemNet:Azure:RetryDelayMs"] = "250",
+                ["MemNet:Azure:RetryMaxDelayMs"] = "3000",
+                ["MemNet:Azure:NetworkTimeoutSeconds"] = "45"
+            })
+            .Build();
+
+        var options = AzureProviderOptions.FromConfiguration(config);
+        Assert.Equal("https://example.blob.core.windows.net", options.StorageServiceUri);
+        Assert.Equal("docs", options.DocumentsContainerName);
+        Assert.Equal("events", options.EventsContainerName);
+        Assert.Equal("audit", options.AuditContainerName);
+        Assert.Equal("https://example.search.windows.net", options.SearchEndpoint);
+        Assert.Equal("events-index", options.SearchIndexName);
+        Assert.Equal(5, options.RetryMaxRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), options.RetryDelay);
+        Assert.Equal(TimeSpan.FromMilliseconds(3000), options.RetryMaxDelay);
+        Assert.Equal(TimeSpan.FromSeconds(45), options.NetworkTimeout);
+
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            var invalidConfig = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["MemNet:Azure:StorageServiceUri"] = "https://example.blob.core.windows.net",
+                    ["MemNet:Azure:SearchEndpoint"] = "https://example.search.windows.net"
+                })
+                .Build();
+
+            _ = AzureProviderOptions.FromConfiguration(invalidConfig);
+        });
+
+        return Task.CompletedTask;
+    }
+
+    private static Task AzureSearchFilterRequestShapingAsync()
+    {
+        var from = new DateTimeOffset(2025, 01, 01, 0, 0, 0, TimeSpan.Zero);
+        var to = new DateTimeOffset(2025, 12, 31, 0, 0, 0, TimeSpan.Zero);
+        var request = new EventSearchRequest(
+            Query: "latency",
+            ServiceId: "assistant'o",
+            SourceType: "chat",
+            ProjectId: "project'o",
+            From: from,
+            To: to,
+            TopK: 10);
+
+        var filter = AzureBlobEventStore.BuildFilter("tenant'o", "user'o", request);
+        Assert.True(!string.IsNullOrWhiteSpace(filter), "Expected non-empty Azure filter.");
+        var shapedFilter = filter!;
+        Assert.True(shapedFilter.Contains("tenant_id eq 'tenant''o'", StringComparison.Ordinal), "Expected tenant filter escape.");
+        Assert.True(shapedFilter.Contains("user_id eq 'user''o'", StringComparison.Ordinal), "Expected user filter escape.");
+        Assert.True(shapedFilter.Contains("service_id eq 'assistant''o'", StringComparison.Ordinal), "Expected service filter escape.");
+        Assert.True(shapedFilter.Contains("source_type eq 'chat'", StringComparison.Ordinal), "Expected source type filter.");
+        Assert.True(shapedFilter.Contains("project_ids/any(p: p eq 'project''o')", StringComparison.Ordinal), "Expected project filter escape.");
+        Assert.True(shapedFilter.Contains($"timestamp ge {from.UtcDateTime:O}", StringComparison.Ordinal), "Expected from timestamp filter.");
+        Assert.True(shapedFilter.Contains($"timestamp le {to.UtcDateTime:O}", StringComparison.Ordinal), "Expected to timestamp filter.");
+        return Task.CompletedTask;
+    }
+#endif
+
+#if !MEMNET_ENABLE_AZURE_SDK
     private static async Task AzureProviderDisabledReturns501Async()
     {
         using var scope = TestScope.Create();
@@ -342,6 +548,7 @@ internal sealed class SpecRunner
         var errorCode = payload["error"]?["code"]?.GetValue<string>();
         Assert.Equal("AZURE_PROVIDER_NOT_ENABLED", errorCode);
     }
+#endif
 
     private static async Task RetentionSweepRemovesExpiredEventsAsync()
     {
@@ -603,6 +810,21 @@ internal static class Assert
 
         throw new Exception($"Expected exception '{typeof(TException).Name}' was not thrown.");
     }
+
+    public static void Throws<TException>(Action action)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+
+        throw new Exception($"Expected exception '{typeof(TException).Name}' was not thrown.");
+    }
 }
 
 internal sealed class TestScope : IDisposable
@@ -778,8 +1000,17 @@ internal sealed class ServiceHost : IDisposable
         var port = ReserveFreePort();
         var baseAddress = new Uri($"http://127.0.0.1:{port}");
         var baseAddressForHosting = $"http://127.0.0.1:{port}";
-        var serviceDll = serviceDllPath
-            ?? Path.Combine(repoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "net8.0", "MemNet.MemoryService.dll");
+        var serviceDll = serviceDllPath;
+        if (string.IsNullOrWhiteSpace(serviceDll))
+        {
+            var candidates = new[]
+            {
+                Path.Combine(repoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "net8.0", "MemNet.MemoryService.dll"),
+                Path.Combine(repoRoot, "src", "MemNet.MemoryService", "bin", "Debug", "azure", "net8.0", "MemNet.MemoryService.dll")
+            };
+            serviceDll = candidates.FirstOrDefault(File.Exists);
+        }
+
         if (!File.Exists(serviceDll))
         {
             throw new Exception($"Service DLL not found for integration host: {serviceDll}");

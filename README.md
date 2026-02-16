@@ -153,7 +153,7 @@ If `MEMNET_PROVIDER=azure` is used without Azure SDK build flag, endpoints retur
 - GitHub Actions workflow: `.github/workflows/ci.yml`.
 - CI currently runs:
   - core restore/build/spec tests
-  - Azure SDK compile check
+  - Azure SDK-enabled restore/build/spec tests
 
 ## Repository Map
 

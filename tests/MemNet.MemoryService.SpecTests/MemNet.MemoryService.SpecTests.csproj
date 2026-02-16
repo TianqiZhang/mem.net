@@ -12,4 +12,8 @@
     <UseAppHost>false</UseAppHost>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(MemNetEnableAzureSdk)' == 'true'">
+    <DefineConstants>$(DefineConstants);MEMNET_ENABLE_AZURE_SDK</DefineConstants>
+  </PropertyGroup>
+
 </Project>

@@ -395,7 +395,7 @@ public sealed class AzureBlobEventStore(AzureClients clients) : IEventStore
                 End: ReadInt(doc, "evidence_end")));
     }
 
-    private static string? BuildFilter(string tenantId, string userId, EventSearchRequest request)
+    internal static string? BuildFilter(string tenantId, string userId, EventSearchRequest request)
     {
         var filters = new List<string>
         {
