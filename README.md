@@ -252,11 +252,26 @@ It wires the official 4-tool memory contract directly into a Microsoft Agent Fra
 - `memory_patch_file(path, old_text, new_text, occurrence)`
 - `memory_write_file(path, content)`
 
-Run it:
+Run it with OpenAI:
 
 ```bash
 export OPENAI_API_KEY="<your_key>"
-export OPENAI_MODEL="gpt-4o-mini"
+export OPENAI_MODEL="gpt-5.1"
+export MEMNET_BASE_URL="http://localhost:5071"
+export MEMNET_TENANT_ID="tenant-demo"
+export MEMNET_USER_ID="user-demo"
+
+dotnet run --project samples/MemNet.AgentFramework.Sample
+```
+
+Or with Azure OpenAI:
+
+```bash
+export AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
+export AZURE_OPENAI_DEPLOYMENT_NAME="gpt-5.1"
+# optional if not using Azure Identity:
+# export AZURE_OPENAI_API_KEY="<your_key>"
+
 export MEMNET_BASE_URL="http://localhost:5071"
 export MEMNET_TENANT_ID="tenant-demo"
 export MEMNET_USER_ID="user-demo"

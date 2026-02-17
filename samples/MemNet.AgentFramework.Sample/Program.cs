@@ -1,13 +1,19 @@
 using System.ComponentModel;
+using System.ClientModel;
 using System.Text;
+using Azure.AI.OpenAI;
+using Azure.Identity;
 using MemNet.AgentMemory;
 using MemNet.Client;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
-var openAiApiKey = RequireEnv("OPENAI_API_KEY");
-var openAiModel = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
+var azureEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
+var useAzureOpenAi = !string.IsNullOrWhiteSpace(azureEndpoint);
+var modelName = useAzureOpenAi
+    ? Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME") ?? "gpt-5.1"
+    : Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-5.1";
 
 var memNetBaseUrl = Environment.GetEnvironmentVariable("MEMNET_BASE_URL") ?? "http://localhost:5071";
 var tenantId = Environment.GetEnvironmentVariable("MEMNET_TENANT_ID") ?? "tenant-demo";
@@ -23,9 +29,10 @@ using var memClient = new MemNetClient(new MemNetClientOptions
 var scope = new MemNetScope(tenantId, userId);
 var memory = new AgentMemory(memClient, new AgentMemoryPolicy("default", Array.Empty<MemorySlotPolicy>()));
 var memoryTools = new MemoryTools(memory, scope);
-var chatClient = new OpenAIClient(openAiApiKey)
-    .GetChatClient(openAiModel)
-    .AsIChatClient();
+var chatClient = useAzureOpenAi
+    ? CreateAzureOpenAiChatClient(azureEndpoint!, modelName)
+    : CreateOpenAiChatClient(modelName);
+var providerLabel = useAzureOpenAi ? "azure_openai" : "openai";
 
 AIAgent agent = chatClient.AsAIAgent(
         name: "memory-agent",
@@ -43,6 +50,7 @@ AIAgent agent = chatClient.AsAIAgent(
 
 var health = await memClient.GetServiceStatusAsync();
 Console.WriteLine($"Connected to mem.net: {health.Service} ({health.Status})");
+Console.WriteLine($"LLM provider: {providerLabel}; model/deployment: {modelName}");
 Console.WriteLine("Type messages. Use /exit to quit.\n");
 
 var session = await agent.CreateSessionAsync();
@@ -112,6 +120,24 @@ static string RequireEnv(string name)
 {
     return Environment.GetEnvironmentVariable(name)
         ?? throw new InvalidOperationException($"Set environment variable '{name}'.");
+}
+
+static IChatClient CreateOpenAiChatClient(string modelName)
+{
+    return new OpenAIClient(RequireEnv("OPENAI_API_KEY"))
+        .GetChatClient(modelName)
+        .AsIChatClient();
+}
+
+static IChatClient CreateAzureOpenAiChatClient(string endpoint, string deploymentName)
+{
+    var apiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY");
+
+    var client = string.IsNullOrWhiteSpace(apiKey)
+        ? new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
+        : new AzureOpenAIClient(new Uri(endpoint), new ApiKeyCredential(apiKey));
+
+    return client.GetChatClient(deploymentName).AsIChatClient();
 }
 
 internal sealed class MemoryTools
