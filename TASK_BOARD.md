@@ -172,9 +172,9 @@
 
 ## Phase 18 - Test Framework Migration and Coverage
 ### 18A - Foundation
-- [ ] Add framework-based test projects (`xUnit` + `Microsoft.NET.Test.Sdk` + `coverlet.collector`)
-- [ ] Keep current executable spec runner during migration (no behavior loss)
-- [ ] Add test project structure split: `UnitTests` and `IntegrationTests`
+- [x] Add framework-based test projects (`xUnit` + `Microsoft.NET.Test.Sdk` + `coverlet.collector`)
+- [x] Keep current executable spec runner during migration (no behavior loss)
+- [x] Add test project structure split: `UnitTests` and `IntegrationTests`
 
 ### 18B - Integration Test Host
 - [ ] Add `WebApplicationFactory<Program>`-based in-process API integration host
