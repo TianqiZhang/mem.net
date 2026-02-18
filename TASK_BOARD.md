@@ -170,6 +170,40 @@
 - [x] Add official Microsoft Agent Framework sample using file-like memory tools
 - [ ] Close Phase 17 only after full build + spec tests pass and docs/specs are in sync
 
+## Phase 18 - Test Framework Migration and Coverage
+### 18A - Foundation
+- [ ] Add framework-based test projects (`xUnit` + `Microsoft.NET.Test.Sdk` + `coverlet.collector`)
+- [ ] Keep current executable spec runner during migration (no behavior loss)
+- [ ] Add test project structure split: `UnitTests` and `IntegrationTests`
+
+### 18B - Integration Test Host
+- [ ] Add `WebApplicationFactory<Program>`-based in-process API integration host
+- [ ] Add integration fixture for deterministic temp data root and env overrides
+- [ ] Add parity helpers for request building and API error assertions
+
+### 18C - Test Migration Waves
+- [ ] Migrate file API contract tests (`GET/PATCH/PUT /files/{path}`) to framework-based integration tests
+- [ ] Migrate context assembly/event/lifecycle API tests to framework-based integration tests
+- [ ] Migrate SDK client and AgentMemory file-tool tests to framework test projects
+- [ ] Keep or move slot/policy helper tests under explicit optional-SDK section
+
+### 18D - Unit Test Expansion
+- [ ] Add unit tests for domain patch engine and deterministic text edit semantics
+- [ ] Add unit tests for coordinator validation/error mapping paths
+- [ ] Add unit tests for SDK retry/concurrency helpers and typed error mapping
+
+### 18E - CI, Reporting, and Coverage
+- [ ] Switch CI primary validation to `dotnet test` (framework-based suites)
+- [ ] Publish test results artifacts (`TRX`/JUnit compatible output)
+- [ ] Publish coverage artifacts (Cobertura) and add baseline threshold gate
+- [ ] Keep out-of-process smoke run for startup/runtime parity and env wiring
+
+### 18F - Cleanup and Exit
+- [ ] Create and complete old-to-new test parity checklist
+- [ ] Remove or slim custom executable spec runner to smoke-only scope
+- [ ] Update `README.md`, `TASK_BOARD.md`, and specs with final test strategy
+- [ ] Close Phase 18 only after CI passes with framework tests and coverage reporting
+
 ## Residual Gaps (Post-Review)
 - [ ] Execute env-gated live Azure integration runs (requires tenant resources/credentials)
 - [ ] Implement full background replay/reindex worker orchestration (currently contracts + service hooks)
