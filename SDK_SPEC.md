@@ -221,4 +221,4 @@ Mutations:
 Current implementation includes:
 - `src/MemNet.Client` path-based file endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
 - `src/MemNet.AgentMemory` high-level file-like tool methods (`MemoryRecallAsync`, `MemoryLoadFileAsync`, `MemoryPatchFileAsync`, `MemoryWriteFileAsync`) plus optional slot/policy helpers.
-- executable SDK contract coverage in `tests/MemNet.MemoryService.SpecTests`.
+- framework SDK coverage in `tests/MemNet.Sdk.UnitTests` and `tests/MemNet.Sdk.IntegrationTests`, with smoke parity retained in `tests/MemNet.MemoryService.SpecTests`.

@@ -193,15 +193,15 @@
 - [x] Add unit tests for SDK retry/concurrency helpers and typed error mapping
 
 ### 18E - CI, Reporting, and Coverage
-- [ ] Switch CI primary validation to `dotnet test` (framework-based suites)
-- [ ] Publish test results artifacts (`TRX`/JUnit compatible output)
-- [ ] Publish coverage artifacts (Cobertura) and add baseline threshold gate
-- [ ] Keep out-of-process smoke run for startup/runtime parity and env wiring
+- [x] Switch CI primary validation to `dotnet test` (framework-based suites)
+- [x] Publish test results artifacts (`TRX`/JUnit compatible output)
+- [x] Publish coverage artifacts (Cobertura) and add baseline threshold gate
+- [x] Keep out-of-process smoke run for startup/runtime parity and env wiring
 
 ### 18F - Cleanup and Exit
-- [ ] Create and complete old-to-new test parity checklist
-- [ ] Remove or slim custom executable spec runner to smoke-only scope
-- [ ] Update `README.md`, `TASK_BOARD.md`, and specs with final test strategy
+- [x] Create and complete old-to-new test parity checklist
+- [x] Remove or slim custom executable spec runner to smoke-only scope
+- [x] Update `README.md`, `TASK_BOARD.md`, and specs with final test strategy
 - [ ] Close Phase 18 only after CI passes with framework tests and coverage reporting
 
 ## Residual Gaps (Post-Review)

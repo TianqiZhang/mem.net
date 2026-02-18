@@ -6,8 +6,10 @@ on:
 
 jobs:
   core:
-    name: Build and Spec Tests
+    name: Build, Framework Tests, Coverage, Smoke
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_THRESHOLD: "0.40"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,8 +25,52 @@ jobs:
       - name: Build
         run: dotnet build MemNet.sln -c Debug --no-restore
 
-      - name: Run spec tests
-        run: dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
+      - name: Run framework tests with coverage
+        run: |
+          dotnet test MemNet.sln -c Debug --no-build \
+            --results-directory artifacts/test-results \
+            --logger "trx;LogFilePrefix=framework-tests" \
+            --collect:"XPlat Code Coverage"
+
+      - name: Enforce coverage threshold
+        run: |
+          python3 - <<'PY'
+          import glob
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob("artifacts/test-results/**/coverage.cobertura.xml", recursive=True)
+          if not files:
+              print("No cobertura coverage files were produced.")
+              sys.exit(1)
+
+          covered = 0.0
+          valid = 0.0
+          for path in files:
+              root = ET.parse(path).getroot()
+              covered += float(root.attrib.get("lines-covered", "0"))
+              valid += float(root.attrib.get("lines-valid", "0"))
+
+          rate = (covered / valid) if valid else 0.0
+          threshold = float(os.environ.get("COVERAGE_THRESHOLD", "0"))
+          print(f"Coverage (weighted line-rate): {rate:.4%}")
+          print(f"Threshold: {threshold:.2%}")
+          if rate < threshold:
+              print("Coverage threshold not met.")
+              sys.exit(1)
+          PY
+
+      - name: Run out-of-process smoke tests
+        run: dotnet run --project tests/MemNet.MemoryService.SpecTests -c Debug
+
+      - name: Upload test and coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-results
+          path: artifacts/test-results
+          if-no-files-found: warn
 
   azure-build:
     name: Azure SDK Build and Spec Tests
@@ -45,4 +91,4 @@ jobs:
         run: dotnet build tests/MemNet.MemoryService.SpecTests/MemNet.MemoryService.SpecTests.csproj -c Debug -p:MemNetEnableAzureSdk=true --no-restore
 
       - name: Run spec tests (Azure SDK enabled)
-        run: dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
+        run: dotnet run --project tests/MemNet.MemoryService.SpecTests/MemNet.MemoryService.SpecTests.csproj -c Debug -p:MemNetEnableAzureSdk=true --no-build

@@ -283,12 +283,15 @@ dotnet run --project samples/MemNet.AgentFramework.Sample
 
 ## Testing and CI
 
-- Local executable spec tests: `tests/MemNet.MemoryService.SpecTests`.
+- Framework test suites: `dotnet test MemNet.sln -c Debug`.
+- CI publishes TRX test results and Cobertura coverage artifacts from framework suites.
+- CI enforces a weighted line-coverage threshold gate.
+- `tests/MemNet.MemoryService.SpecTests` is now smoke-only (startup/runtime wiring + bootstrap/Azure-shape checks).
 - Optional slot/policy spec coverage can be enabled with `MEMNET_RUN_OPTIONAL_SDK_TESTS=1`.
 - GitHub Actions workflow: `.github/workflows/ci.yml`.
 - CI currently runs:
-  - core restore/build/spec tests
-  - Azure SDK-enabled restore/build/spec tests
+  - core restore/build/framework tests + coverage gate + smoke run
+  - Azure SDK-enabled restore/build/spec smoke run
 
 ## Repository Map
 
@@ -304,6 +307,7 @@ dotnet run --project samples/MemNet.AgentFramework.Sample
 - `tools/MemNet.Bootstrap` - deployment/bootstrap tool for Azure containers and AI Search index.
 - `infra/search/events-index.schema.json` - source-controlled schema for event search index.
 - `tests/MemNet.MemoryService.SpecTests` - executable specification tests.
+- `tests/TEST_PARITY_CHECKLIST.md` - old-to-new test migration parity map.
 - `TASK_BOARD.md` - implementation progress and backlog.
 - `AGENTS.md` - development guardrails and first-principles rules.
 

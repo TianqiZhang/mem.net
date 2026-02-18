@@ -326,3 +326,7 @@ Audit records include actor, tenant/user, target path, ETag transition, reason, 
 ## 19. Implementation Status
 Current implementation satisfies v2 acceptance criteria with a single policy-free request shape.
 Phase 17B/17C namespace removal and file-first SDK primitives are implemented.
+Validation strategy:
+- framework-first suites (`xUnit`) are primary: `MemNet.MemoryService.UnitTests`, `MemNet.MemoryService.IntegrationTests`, `MemNet.Sdk.UnitTests`, `MemNet.Sdk.IntegrationTests`.
+- CI publishes TRX + Cobertura artifacts and enforces a weighted line-coverage threshold.
+- executable spec runner is retained as smoke-only parity (`tests/MemNet.MemoryService.SpecTests`), with optional slot/policy helper checks gated by `MEMNET_RUN_OPTIONAL_SDK_TESTS=1`.

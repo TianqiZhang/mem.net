@@ -34,45 +34,23 @@ internal sealed partial class SpecRunner
 
     private void RegisterTests()
     {
-        AddTest(nameof(FilesystemStoreContractsAreConsistentAsync), FilesystemStoreContractsAreConsistentAsync);
-
-        AddTest(nameof(PatchDocumentHappyPathAsync), PatchDocumentHappyPathAsync);
-        AddTest(nameof(PatchDocumentReturns412OnEtagMismatchAsync), PatchDocumentReturns412OnEtagMismatchAsync);
-        AddTest(nameof(PatchDocumentReturns422OnInvalidPatchPathAsync), PatchDocumentReturns422OnInvalidPatchPathAsync);
-        AddTest(nameof(PatchFileTextEditsApplyDeterministicallyAsync), PatchFileTextEditsApplyDeterministicallyAsync);
-        AddTest(nameof(PatchFileTextEditsRejectAmbiguousMatchAsync), PatchFileTextEditsRejectAmbiguousMatchAsync);
-        AddTest(nameof(PatchFileTextEditsRejectMissingMatchAsync), PatchFileTextEditsRejectMissingMatchAsync);
-        AddTest(nameof(AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync), AssembleContextIncludesRequestedFilesAndRespectsBudgetsAsync);
-        AddTest(nameof(AssembleContextRejectsEmptyRequestAsync), AssembleContextRejectsEmptyRequestAsync);
-        AddTest(nameof(EventSearchReturnsRelevantResultsAsync), EventSearchReturnsRelevantResultsAsync);
-
+        // Smoke-only scope: framework test projects hold primary behavioral coverage.
         AddTest(nameof(HttpFilePatchFlowWorksEndToEndAsync), HttpFilePatchFlowWorksEndToEndAsync);
-        AddTest(nameof(HttpFilePatchAddOperationWorksEndToEndAsync), HttpFilePatchAddOperationWorksEndToEndAsync);
-        AddTest(nameof(HttpContextAssembleRejectsEmptyFilesAsync), HttpContextAssembleRejectsEmptyFilesAsync);
         AddTest(nameof(HttpContextAssembleWithExplicitFilesWorksAsync), HttpContextAssembleWithExplicitFilesWorksAsync);
         AddTest(nameof(HttpEventsWriteAndSearchFlowWorksAsync), HttpEventsWriteAndSearchFlowWorksAsync);
-        AddTest(nameof(SdkClientPatchAndGetFlowWorksAsync), SdkClientPatchAndGetFlowWorksAsync);
-        AddTest(nameof(SdkClientMapsApiErrorsAsync), SdkClientMapsApiErrorsAsync);
-        AddTest(nameof(SdkClientAssembleAndSearchFlowWorksAsync), SdkClientAssembleAndSearchFlowWorksAsync);
-        AddTest(nameof(AgentMemoryPrepareTurnFlowWorksAsync), AgentMemoryPrepareTurnFlowWorksAsync);
-        AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsAsync), SdkUpdateWithRetryResolvesEtagConflictsAsync);
         AddTest(nameof(AgentMemoryFileToolFlowWorksAsync), AgentMemoryFileToolFlowWorksAsync);
-        AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync), SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync);
-        AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync), SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync);
+        AddTest(nameof(ForgetUserRemovesDocumentsAndEventsAsync), ForgetUserRemovesDocumentsAndEventsAsync);
+        AddTest(nameof(RetentionSweepRemovesExpiredEventsAsync), RetentionSweepRemovesExpiredEventsAsync);
+        AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
+        AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
         if (ShouldRunOptionalSdkTests())
         {
             AddTest(nameof(AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync), AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync);
         }
-        AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
-        AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
 
 #if !MEMNET_ENABLE_AZURE_SDK
         AddTest(nameof(AzureProviderDisabledReturns501Async), AzureProviderDisabledReturns501Async);
 #endif
-
-        AddTest(nameof(RetentionSweepRemovesExpiredEventsAsync), RetentionSweepRemovesExpiredEventsAsync);
-        AddTest(nameof(RetentionSweepRequestShapeWorksAsync), RetentionSweepRequestShapeWorksAsync);
-        AddTest(nameof(ForgetUserRemovesDocumentsAndEventsAsync), ForgetUserRemovesDocumentsAndEventsAsync);
 
 #if MEMNET_ENABLE_AZURE_SDK
         AddTest(nameof(AzureProviderOptionsMappingAndValidationAsync), AzureProviderOptionsMappingAndValidationAsync);
