@@ -188,9 +188,9 @@
 - [x] Keep or move slot/policy helper tests under explicit optional-SDK section
 
 ### 18D - Unit Test Expansion
-- [ ] Add unit tests for domain patch engine and deterministic text edit semantics
-- [ ] Add unit tests for coordinator validation/error mapping paths
-- [ ] Add unit tests for SDK retry/concurrency helpers and typed error mapping
+- [x] Add unit tests for domain patch engine and deterministic text edit semantics
+- [x] Add unit tests for coordinator validation/error mapping paths
+- [x] Add unit tests for SDK retry/concurrency helpers and typed error mapping
 
 ### 18E - CI, Reporting, and Coverage
 - [ ] Switch CI primary validation to `dotnet test` (framework-based suites)
