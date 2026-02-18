@@ -55,11 +55,14 @@ internal sealed partial class SpecRunner
         AddTest(nameof(SdkClientMapsApiErrorsAsync), SdkClientMapsApiErrorsAsync);
         AddTest(nameof(SdkClientAssembleAndSearchFlowWorksAsync), SdkClientAssembleAndSearchFlowWorksAsync);
         AddTest(nameof(AgentMemoryPrepareTurnFlowWorksAsync), AgentMemoryPrepareTurnFlowWorksAsync);
-        AddTest(nameof(AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync), AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync);
         AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsAsync), SdkUpdateWithRetryResolvesEtagConflictsAsync);
         AddTest(nameof(AgentMemoryFileToolFlowWorksAsync), AgentMemoryFileToolFlowWorksAsync);
         AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync), SdkUpdateWithRetryResolvesEtagConflictsForTextPatchFlowAsync);
         AddTest(nameof(SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync), SdkUpdateWithRetryResolvesEtagConflictsForWriteFlowAsync);
+        if (ShouldRunOptionalSdkTests())
+        {
+            AddTest(nameof(AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync), AgentMemoryPatchSlotRulesAreEnforcedClientSideAsync);
+        }
         AddTest(nameof(SearchIndexSchemaLoadsAndBuildsSearchIndexAsync), SearchIndexSchemaLoadsAndBuildsSearchIndexAsync);
         AddTest(nameof(BootstrapCliParsesArgumentsAsync), BootstrapCliParsesArgumentsAsync);
 
@@ -82,6 +85,13 @@ internal sealed partial class SpecRunner
     private void AddTest(string name, Func<Task> execute)
     {
         _tests.Add(new TestCase(name, execute));
+    }
+
+    private static bool ShouldRunOptionalSdkTests()
+    {
+        var raw = Environment.GetEnvironmentVariable("MEMNET_RUN_OPTIONAL_SDK_TESTS");
+        return string.Equals(raw, "1", StringComparison.Ordinal)
+               || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record TestCase(string Name, Func<Task> Execute);

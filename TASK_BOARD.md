@@ -185,7 +185,7 @@
 - [x] Migrate file API contract tests (`GET/PATCH/PUT /files/{path}`) to framework-based integration tests
 - [x] Migrate context assembly/event/lifecycle API tests to framework-based integration tests
 - [x] Migrate SDK client and AgentMemory file-tool tests to framework test projects
-- [ ] Keep or move slot/policy helper tests under explicit optional-SDK section
+- [x] Keep or move slot/policy helper tests under explicit optional-SDK section
 
 ### 18D - Unit Test Expansion
 - [ ] Add unit tests for domain patch engine and deterministic text edit semantics

@@ -77,7 +77,9 @@ dotnet run --project src/MemNet.MemoryService
 ### 3) Run spec tests
 
 ```bash
-dotnet tests/MemNet.MemoryService.SpecTests/bin/Debug/net8.0/MemNet.MemoryService.SpecTests.dll
+dotnet run --project tests/MemNet.MemoryService.SpecTests -c Debug
+# optional slot/policy SDK helpers:
+# MEMNET_RUN_OPTIONAL_SDK_TESTS=1 dotnet run --project tests/MemNet.MemoryService.SpecTests -c Debug
 ```
 
 ### 4) Health check
@@ -282,6 +284,7 @@ dotnet run --project samples/MemNet.AgentFramework.Sample
 ## Testing and CI
 
 - Local executable spec tests: `tests/MemNet.MemoryService.SpecTests`.
+- Optional slot/policy spec coverage can be enabled with `MEMNET_RUN_OPTIONAL_SDK_TESTS=1`.
 - GitHub Actions workflow: `.github/workflows/ci.yml`.
 - CI currently runs:
   - core restore/build/spec tests
