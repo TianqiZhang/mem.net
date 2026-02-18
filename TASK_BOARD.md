@@ -177,9 +177,9 @@
 - [x] Add test project structure split: `UnitTests` and `IntegrationTests`
 
 ### 18B - Integration Test Host
-- [ ] Add `WebApplicationFactory<Program>`-based in-process API integration host
-- [ ] Add integration fixture for deterministic temp data root and env overrides
-- [ ] Add parity helpers for request building and API error assertions
+- [x] Add `WebApplicationFactory<Program>`-based in-process API integration host
+- [x] Add integration fixture for deterministic temp data root and env overrides
+- [x] Add parity helpers for request building and API error assertions
 
 ### 18C - Test Migration Waves
 - [ ] Migrate file API contract tests (`GET/PATCH/PUT /files/{path}`) to framework-based integration tests
