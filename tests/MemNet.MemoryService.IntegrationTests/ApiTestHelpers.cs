@@ -21,7 +21,24 @@ internal static class ApiTestHelpers
         {
             Content = JsonContent.Create(body)
         };
-        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        if (!string.IsNullOrWhiteSpace(etag))
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", etag);
+        }
+        request.Headers.TryAddWithoutValidation("X-Service-Id", actor);
+        return request;
+    }
+
+    public static HttpRequestMessage CreatePutRequest(string route, object body, string? etag = "*", string actor = "integration-tests")
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, route)
+        {
+            Content = JsonContent.Create(body)
+        };
+        if (!string.IsNullOrWhiteSpace(etag))
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", etag);
+        }
         request.Headers.TryAddWithoutValidation("X-Service-Id", actor);
         return request;
     }

@@ -182,7 +182,7 @@
 - [x] Add parity helpers for request building and API error assertions
 
 ### 18C - Test Migration Waves
-- [ ] Migrate file API contract tests (`GET/PATCH/PUT /files/{path}`) to framework-based integration tests
+- [x] Migrate file API contract tests (`GET/PATCH/PUT /files/{path}`) to framework-based integration tests
 - [ ] Migrate context assembly/event/lifecycle API tests to framework-based integration tests
 - [ ] Migrate SDK client and AgentMemory file-tool tests to framework test projects
 - [ ] Keep or move slot/policy helper tests under explicit optional-SDK section
