@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemNet.MemoryService.UnitTe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemNet.MemoryService.IntegrationTests", "tests\MemNet.MemoryService.IntegrationTests\MemNet.MemoryService.IntegrationTests.csproj", "{C1D30550-68A3-4ADB-B3D6-C43D48250DF1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemNet.Sdk.IntegrationTests", "tests\MemNet.Sdk.IntegrationTests\MemNet.Sdk.IntegrationTests.csproj", "{A0A06211-38EC-40B6-92AD-11B759CDC37D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,10 @@ Global
 		{C1D30550-68A3-4ADB-B3D6-C43D48250DF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C1D30550-68A3-4ADB-B3D6-C43D48250DF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C1D30550-68A3-4ADB-B3D6-C43D48250DF1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0A06211-38EC-40B6-92AD-11B759CDC37D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0A06211-38EC-40B6-92AD-11B759CDC37D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0A06211-38EC-40B6-92AD-11B759CDC37D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0A06211-38EC-40B6-92AD-11B759CDC37D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{AB60C97A-454B-49C2-AD28-41A3C0E7A3CF} = {D9BE6ECE-72E3-416E-A942-7EADE6598E21}
@@ -85,5 +91,6 @@ Global
 		{16EB7308-2A39-40C4-B548-B304712BB9E9} = {932E67FD-970E-40BE-BA27-A570612A6E2A}
 		{BFF4EA84-9BF6-4F46-9A70-156D935895D0} = {932E67FD-970E-40BE-BA27-A570612A6E2A}
 		{C1D30550-68A3-4ADB-B3D6-C43D48250DF1} = {932E67FD-970E-40BE-BA27-A570612A6E2A}
+		{A0A06211-38EC-40B6-92AD-11B759CDC37D} = {932E67FD-970E-40BE-BA27-A570612A6E2A}
 	EndGlobalSection
 EndGlobal
