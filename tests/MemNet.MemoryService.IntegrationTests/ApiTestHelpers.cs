@@ -12,8 +12,17 @@ internal static class ApiTestHelpers
     public static string EventsRoute(MemNetApiFixture fixture) =>
         $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/events";
 
+    public static string EventsSearchRoute(MemNetApiFixture fixture) =>
+        $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/events:search";
+
     public static string ContextAssembleRoute(MemNetApiFixture fixture) =>
         $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/context:assemble";
+
+    public static string RetentionApplyRoute(MemNetApiFixture fixture) =>
+        $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/retention:apply";
+
+    public static string ForgetUserRoute(MemNetApiFixture fixture) =>
+        $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/memory";
 
     public static HttpRequestMessage CreatePatchRequest(string route, string etag, object body, string actor = "integration-tests")
     {
