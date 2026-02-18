@@ -100,7 +100,7 @@ internal sealed partial class SpecRunner
         Assert.Equal("HTTP patch add operation update.", note);
     }
 
-    private static async Task HttpContextAssembleReturnsDefaultFilesAsync()
+    private static async Task HttpContextAssembleRejectsEmptyFilesAsync()
     {
         using var scope = TestScope.Create();
         using var host = await ServiceHost.StartAsync(scope.RepoRoot, scope.DataRoot);
@@ -110,23 +110,16 @@ internal sealed partial class SpecRunner
             $"/v1/tenants/{scope.Keys.Tenant}/users/{scope.Keys.User}/context:assemble",
             new
             {
-                files = new[]
-                {
-                    new { path = "user/profile.json" },
-                    new { path = "user/long_term_memory.json" }
-                },
+                files = Array.Empty<object>(),
                 max_docs = 4,
                 max_chars_total = 30000
             });
 
-        Assert.Equal(HttpStatusCode.OK, contextResponse.StatusCode);
-        var contextBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
-            ?? throw new Exception("Expected context response.");
-        var contextDocs = contextBody["files"] as JsonArray ?? throw new Exception("Expected files array.");
-        Assert.Equal(2, contextDocs.Count);
-
-        var droppedDocs = contextBody["dropped_files"] as JsonArray ?? throw new Exception("Expected dropped_files array.");
-        Assert.Equal(0, droppedDocs.Count);
+        Assert.Equal(HttpStatusCode.BadRequest, contextResponse.StatusCode);
+        var errorBody = JsonNode.Parse(await contextResponse.Content.ReadAsStringAsync())?.AsObject()
+            ?? throw new Exception("Expected error response.");
+        var code = errorBody["error"]?["code"]?.GetValue<string>();
+        Assert.Equal("MISSING_ASSEMBLY_TARGETS", code);
     }
 
     private static async Task HttpContextAssembleWithExplicitFilesWorksAsync()
