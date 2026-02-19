@@ -28,7 +28,9 @@ using var memClient = new MemNetClient(new MemNetClientOptions
 
 var scope = new MemNetScope(tenantId, userId);
 var memory = new AgentMemory(memClient, new AgentMemoryPolicy("default", Array.Empty<MemorySlotPolicy>()));
-var memoryTools = new MemoryTools(memory, scope);
+var memorySessionContext = new MemorySessionContext(memory, scope);
+await memorySessionContext.PrimeAsync();
+var memoryTools = new MemoryTools(memory, scope, memorySessionContext);
 var chatClient = useAzureOpenAi
     ? CreateAzureOpenAiChatClient(azureEndpoint!, modelName)
     : CreateOpenAiChatClient(modelName);
@@ -53,6 +55,7 @@ AIAgent agent = chatClient.AsAIAgent(
 var health = await memClient.GetServiceStatusAsync();
 Console.WriteLine($"Connected to mem.net: {health.Service} ({health.Status})");
 Console.WriteLine($"LLM provider: {providerLabel}; model/deployment: {modelName}");
+Console.WriteLine("Memory preload policy: prime once per session; refresh/reinject after profile/long-term writes.");
 Console.WriteLine("Type messages. Use /exit to quit.\n");
 
 var session = await agent.CreateSessionAsync();
@@ -74,7 +77,8 @@ while (true)
     var responseText = new StringBuilder();
 
     Console.WriteLine();
-    await foreach (var update in agent.RunStreamingAsync(input, session))
+    var turnMessages = memorySessionContext.BuildTurnMessages(input);
+    await foreach (var update in agent.RunStreamingAsync(turnMessages, session))
     {
         if (!string.IsNullOrEmpty(update.Text))
         {
@@ -153,11 +157,13 @@ internal sealed class MemoryTools
 {
     private readonly AgentMemory _memory;
     private readonly MemNetScope _scope;
+    private readonly MemorySessionContext _sessionContext;
 
-    public MemoryTools(AgentMemory memory, MemNetScope scope)
+    public MemoryTools(AgentMemory memory, MemNetScope scope, MemorySessionContext sessionContext)
     {
         _memory = memory;
         _scope = scope;
+        _sessionContext = sessionContext;
     }
 
     [Description("Search event digests in long-term memory and return top results.")]
@@ -199,7 +205,8 @@ internal sealed class MemoryTools
         try
         {
             var file = await _memory.MemoryLoadFileAsync(_scope, path, cancellationToken);
-            LogToolResult("memory_load_file", $"ok (chars={file.Content.Length}, etag={file.ETag})");
+            var result = BuildFileContentResult(path, file.Content, "Loaded");
+            LogToolResult("memory_load_file", result);
             return file.Content;
         }
         catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -228,8 +235,10 @@ internal sealed class MemoryTools
                 [new MemoryPatchEdit(old_text, new_text, occurrence)],
                 cancellationToken: cancellationToken);
 
-            LogToolResult("memory_patch_file", $"ok (etag={file.ETag})");
-            return $"Patched {path}. New etag: {file.ETag}";
+            var result = BuildFileContentResult(path, file.Content, "Patched");
+            LogToolResult("memory_patch_file", result);
+            _sessionContext.MarkPreloadedFileUpdated(path, file.Content);
+            return result;
         }
         catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
@@ -246,8 +255,10 @@ internal sealed class MemoryTools
     {
         LogToolCall("memory_write_file", $"path=\"{path}\", chars={content.Length}");
         var file = await _memory.MemoryWriteFileAsync(_scope, path, content, cancellationToken: cancellationToken);
-        LogToolResult("memory_write_file", $"ok (etag={file.ETag})");
-        return $"Wrote {path}. New etag: {file.ETag}";
+        var result = BuildFileContentResult(path, file.Content, "Wrote");
+        LogToolResult("memory_write_file", result);
+        _sessionContext.MarkPreloadedFileUpdated(path, file.Content);
+        return result;
     }
 
     private static void LogToolCall(string toolName, string args)
@@ -268,5 +279,109 @@ internal sealed class MemoryTools
     {
         var oneLine = value.ReplaceLineEndings(" ").Trim();
         return oneLine.Length <= maxChars ? oneLine : oneLine[..maxChars] + "...";
+    }
+
+    private static string BuildFileContentResult(string path, string content, string operation)
+    {
+        return $"{operation} {path}.\n\nCurrent content:\n{content}";
+    }
+}
+
+internal sealed class MemorySessionContext
+{
+    private const string ProfilePath = "user/profile.md";
+    private const string LongTermPath = "user/long_term_memory.md";
+
+    private readonly AgentMemory _memory;
+    private readonly MemNetScope _scope;
+    private string? _profileContent;
+    private string? _longTermContent;
+    private bool _includeSnapshotOnNextTurn = true;
+
+    public MemorySessionContext(AgentMemory memory, MemNetScope scope)
+    {
+        _memory = memory;
+        _scope = scope;
+    }
+
+    public async Task PrimeAsync(CancellationToken cancellationToken = default)
+    {
+        _profileContent = await TryLoadMemoryFileAsync(ProfilePath, cancellationToken);
+        _longTermContent = await TryLoadMemoryFileAsync(LongTermPath, cancellationToken);
+        _includeSnapshotOnNextTurn = true;
+    }
+
+    public IReadOnlyList<ChatMessage> BuildTurnMessages(string userInput)
+    {
+        if (!_includeSnapshotOnNextTurn)
+        {
+            return [new ChatMessage(ChatRole.User, userInput)];
+        }
+
+        _includeSnapshotOnNextTurn = false;
+        return
+        [
+            new ChatMessage(
+                ChatRole.System,
+                "Use this preloaded memory snapshot as default context. " +
+                "Avoid redundant memory_load_file calls for these files unless explicitly asked to verify.\n\n" +
+                BuildSnapshotText()),
+            new ChatMessage(ChatRole.User, userInput)
+        ];
+    }
+
+    public void MarkPreloadedFileUpdated(string path, string content)
+    {
+        if (path.Equals(ProfilePath, StringComparison.OrdinalIgnoreCase))
+        {
+            _profileContent = content;
+            _includeSnapshotOnNextTurn = true;
+            return;
+        }
+
+        if (path.Equals(LongTermPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _longTermContent = content;
+            _includeSnapshotOnNextTurn = true;
+        }
+    }
+
+    private async Task<string?> TryLoadMemoryFileAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var file = await _memory.MemoryLoadFileAsync(_scope, path, cancellationToken);
+            return file.Content;
+        }
+        catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    private string BuildSnapshotText()
+    {
+        var sb = new StringBuilder();
+        AppendSnapshotSection(sb, ProfilePath, _profileContent);
+        sb.AppendLine();
+        AppendSnapshotSection(sb, LongTermPath, _longTermContent);
+        return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendSnapshotSection(StringBuilder sb, string path, string? content)
+    {
+        sb.AppendLine($"[{path}]");
+        if (content is null)
+        {
+            sb.AppendLine("(not found)");
+        }
+        else if (string.IsNullOrWhiteSpace(content))
+        {
+            sb.AppendLine("(empty)");
+        }
+        else
+        {
+            sb.AppendLine(content.TrimEnd());
+        }
     }
 }

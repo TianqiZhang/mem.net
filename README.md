@@ -254,6 +254,10 @@ It wires the official 4-tool memory contract directly into a Microsoft Agent Fra
 - `memory_patch_file(path, old_text, new_text, occurrence)`
 - `memory_write_file(path, content)`
 
+Sample run screenshot:
+
+![mem.net sample agent run](mem.net.demo.png)
+
 Run it with OpenAI:
 
 ```bash
