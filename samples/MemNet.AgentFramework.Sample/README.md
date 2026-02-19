@@ -9,6 +9,9 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
   - `memory_load_file(path)`
   - `memory_patch_file(path, old_text, new_text, occurrence)`
   - `memory_write_file(path, content)`
+- Streams assistant output token-by-token in the console.
+- Prints memory tool calls/results in the console (for transparency during runs).
+- Uses concise default response behavior (short replies unless user asks for detail).
 - Uses `MemNet.AgentMemory` directly for tool behavior.
 - Writes one event digest per turn so `memory_recall` has data to search.
 

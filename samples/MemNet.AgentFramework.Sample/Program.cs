@@ -38,6 +38,8 @@ AIAgent agent = chatClient.AsAIAgent(
         name: "memory-agent",
         instructions:
             "You are a memory agent. " +
+            "Keep responses concise by default (target <= 120 words, unless user explicitly asks for detail). " +
+            "Do not dump long blocks of text unless requested. " +
             "Use memory tools to persist important facts in markdown files and recall prior event digests. " +
             "Prefer: user/profile.md, user/long_term_memory.md, projects/{project_id}.md.",
         tools:
@@ -69,14 +71,21 @@ while (true)
         break;
     }
 
-    var response = await agent.RunAsync(input, session);
-    var responseText = response?.ToString() ?? string.Empty;
+    var responseText = new StringBuilder();
 
     Console.WriteLine();
-    Console.WriteLine(responseText);
+    await foreach (var update in agent.RunStreamingAsync(input, session))
+    {
+        if (!string.IsNullOrEmpty(update.Text))
+        {
+            Console.Write(update.Text);
+            responseText.Append(update.Text);
+        }
+    }
+    Console.WriteLine();
     Console.WriteLine();
 
-    await WriteTurnDigestAsync(memory, scope, serviceId, input, responseText);
+    await WriteTurnDigestAsync(memory, scope, serviceId, input, responseText.ToString());
 }
 
 return;
@@ -157,12 +166,15 @@ internal sealed class MemoryTools
         [Description("Maximum number of hits. Recommended range: 1-20.")] int topK = 8,
         CancellationToken cancellationToken = default)
     {
+        LogToolCall("memory_recall", $"query=\"{ClampForLog(query, 80)}\", topK={topK}");
         var results = await _memory.MemoryRecallAsync(_scope, query, topK, cancellationToken);
         if (results.Count == 0)
         {
+            LogToolResult("memory_recall", "0 results");
             return "No event memories matched that query.";
         }
 
+        LogToolResult("memory_recall", $"{results.Count} result(s)");
         var sb = new StringBuilder();
         for (var i = 0; i < results.Count; i++)
         {
@@ -183,13 +195,16 @@ internal sealed class MemoryTools
         [Description("File path, for example user/profile.md.")] string path,
         CancellationToken cancellationToken = default)
     {
+        LogToolCall("memory_load_file", $"path=\"{path}\"");
         try
         {
             var file = await _memory.MemoryLoadFileAsync(_scope, path, cancellationToken);
+            LogToolResult("memory_load_file", $"ok (chars={file.Content.Length}, etag={file.ETag})");
             return file.Content;
         }
         catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
+            LogToolResult("memory_load_file", "not_found");
             return $"File not found: {path}";
         }
     }
@@ -202,6 +217,9 @@ internal sealed class MemoryTools
         [Description("1-based occurrence index when old_text appears multiple times. Optional.")] int? occurrence = null,
         CancellationToken cancellationToken = default)
     {
+        LogToolCall(
+            "memory_patch_file",
+            $"path=\"{path}\", old=\"{ClampForLog(old_text, 60)}\", new=\"{ClampForLog(new_text, 60)}\", occurrence={occurrence?.ToString() ?? "null"}");
         try
         {
             var file = await _memory.MemoryPatchFileAsync(
@@ -210,10 +228,12 @@ internal sealed class MemoryTools
                 [new MemoryPatchEdit(old_text, new_text, occurrence)],
                 cancellationToken: cancellationToken);
 
+            LogToolResult("memory_patch_file", $"ok (etag={file.ETag})");
             return $"Patched {path}. New etag: {file.ETag}";
         }
         catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
+            LogToolResult("memory_patch_file", "not_found");
             return $"File not found: {path}";
         }
     }
@@ -224,7 +244,29 @@ internal sealed class MemoryTools
         [Description("Full markdown content to write.")] string content,
         CancellationToken cancellationToken = default)
     {
+        LogToolCall("memory_write_file", $"path=\"{path}\", chars={content.Length}");
         var file = await _memory.MemoryWriteFileAsync(_scope, path, content, cancellationToken: cancellationToken);
+        LogToolResult("memory_write_file", $"ok (etag={file.ETag})");
         return $"Wrote {path}. New etag: {file.ETag}";
+    }
+
+    private static void LogToolCall(string toolName, string args)
+    {
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.WriteLine($"\n[tool-call] {toolName}({args})");
+        Console.ResetColor();
+    }
+
+    private static void LogToolResult(string toolName, string result)
+    {
+        Console.ForegroundColor = ConsoleColor.DarkGreen;
+        Console.WriteLine($"[tool-result] {toolName}: {result}");
+        Console.ResetColor();
+    }
+
+    private static string ClampForLog(string value, int maxChars)
+    {
+        var oneLine = value.ReplaceLineEndings(" ").Trim();
+        return oneLine.Length <= maxChars ? oneLine : oneLine[..maxChars] + "...";
     }
 }
