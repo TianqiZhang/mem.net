@@ -72,6 +72,18 @@ public sealed class MemNetClient : IDisposable
         return await DeserializeAsync<FileReadResult>(response, cancellationToken);
     }
 
+    public async Task<ListFilesResponse> ListFilesAsync(MemNetScope scope, ListFilesRequest request, CancellationToken cancellationToken = default)
+    {
+        var route = BuildFilesListRoute(scope, request);
+        using var response = await SendWithRetriesAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, route),
+            allowRetry: true,
+            cancellationToken);
+
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await DeserializeAsync<ListFilesResponse>(response, cancellationToken);
+    }
+
     public async Task<FileMutationResult> PatchFileAsync(
         MemNetScope scope,
         FileRef file,
@@ -342,6 +354,26 @@ public sealed class MemNetClient : IDisposable
     {
         var encodedPath = EncodePath(file.Path);
         return BuildScopeRoute(scope, $"/files/{encodedPath}");
+    }
+
+    private static string BuildFilesListRoute(MemNetScope scope, ListFilesRequest request)
+    {
+        var query = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(request.Prefix))
+        {
+            query.Add($"prefix={Uri.EscapeDataString(request.Prefix)}");
+        }
+
+        if (request.Limit.HasValue)
+        {
+            query.Add($"limit={request.Limit.Value}");
+        }
+
+        var suffix = query.Count == 0
+            ? "/files:list"
+            : $"/files:list?{string.Join("&", query)}";
+
+        return BuildScopeRoute(scope, suffix);
     }
 
     private static string BuildScopeRoute(MemNetScope scope, string suffix)

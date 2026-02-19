@@ -7,6 +7,13 @@ public interface IDocumentStore
 {
     Task<DocumentRecord?> GetAsync(DocumentKey key, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<FileListItem>> ListAsync(
+        string tenantId,
+        string userId,
+        string? prefix,
+        int limit,
+        CancellationToken cancellationToken = default);
+
     Task<DocumentRecord> UpsertAsync(
         DocumentKey key,
         DocumentEnvelope envelope,

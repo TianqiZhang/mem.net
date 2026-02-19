@@ -73,6 +73,7 @@ Optional future package:
 All methods accept `CancellationToken`.
 
 - `GetServiceStatusAsync()` -> `GET /`
+- `ListFilesAsync(MemNetScope scope, ListFilesRequest request)` -> `GET /files:list`
 - `GetFileAsync(MemNetScope scope, FileRef file)` -> `GET /files/{**path}`
 - `PatchFileAsync(MemNetScope scope, FileRef file, PatchDocumentRequest request, string ifMatch)` -> `PATCH /files/{**path}`
 - `WriteFileAsync(MemNetScope scope, FileRef file, ReplaceDocumentRequest request, string ifMatch)` -> `PUT /files/{**path}`
@@ -132,9 +133,10 @@ Default max conflict retries: `3`.
 The official harness-facing contract is file-like and intentionally minimal:
 
 1. `memory_recall(query, top_k)`
-2. `memory_load_file(path)`
-3. `memory_patch_file(path, edits)`
-4. `memory_write_file(path, content)`
+2. `memory_list_files(prefix, limit)`
+3. `memory_load_file(path)`
+4. `memory_patch_file(path, edits)`
+5. `memory_write_file(path, content)`
 
 Recommended defaults:
 - LLM-facing files use markdown (`.md`) where possible.
@@ -155,6 +157,9 @@ Recommended defaults:
 
 `memory_recall(query, top_k)`:
 - wraps event search with deterministic result shaping.
+
+`memory_list_files(prefix, limit)`:
+- lists files by optional prefix for restart-safe memory discovery (for example `projects/`).
 
 ### 9.3 Optional Policy Layer
 Slot/policy APIs may remain as app-facing helpers, but are not the primary LLM-facing contract.
@@ -212,7 +217,7 @@ Mutations:
 ## 15. Acceptance Criteria (SDK v1)
 1. Low-level client covers all v2 endpoints.
 2. No low-level API requires policy/binding concepts.
-3. High-level API exposes official 4-tool file-like contract for agent harnesses.
+3. High-level API exposes official 5-tool file-like contract for agent harnesses.
 4. Typed exceptions include service `code` and `request_id`.
 5. Concurrency helper is deterministic and bounded.
 6. Tests run offline against local harness.
@@ -220,5 +225,5 @@ Mutations:
 ## 16. Implementation Status
 Current implementation includes:
 - `src/MemNet.Client` path-based file endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
-- `src/MemNet.AgentMemory` high-level file-like tool methods (`MemoryRecallAsync`, `MemoryLoadFileAsync`, `MemoryPatchFileAsync`, `MemoryWriteFileAsync`) plus optional slot/policy helpers.
+- `src/MemNet.AgentMemory` high-level file-like tool methods (`MemoryRecallAsync`, `MemoryListFilesAsync`, `MemoryLoadFileAsync`, `MemoryPatchFileAsync`, `MemoryWriteFileAsync`) plus optional slot/policy helpers.
 - framework SDK coverage in `tests/MemNet.Sdk.UnitTests` and `tests/MemNet.Sdk.IntegrationTests`, with smoke parity retained in `tests/MemNet.MemoryService.SpecTests`.

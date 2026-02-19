@@ -93,4 +93,25 @@ public sealed class AgentMemoryIntegrationTests(MemNetApiFixture fixture)
         var loaded = await memory.MemoryLoadFileAsync(scope, path);
         Assert.Contains("line two", loaded.Content);
     }
+
+    [Fact]
+    public async Task FileToolFlow_ListFiles_Works()
+    {
+        fixture.ResetDataRoot();
+        using var client = SdkTestData.CreateClient(fixture.Client, serviceId: "agent-sdk-tests");
+
+        var scope = new MemNetScope(fixture.TenantId, fixture.UserId);
+        var memory = new MemNet.AgentMemory.AgentMemory(
+            client,
+            new AgentMemoryPolicy(
+                PolicyId: "default",
+                Slots: []));
+
+        await memory.MemoryWriteFileAsync(scope, "projects/alpha.md", "# Alpha\n");
+        await memory.MemoryWriteFileAsync(scope, "projects/beta.md", "# Beta\n");
+
+        var listed = await memory.MemoryListFilesAsync(scope, "projects/", 20);
+        Assert.Contains(listed, x => x.Path == "projects/alpha.md");
+        Assert.Contains(listed, x => x.Path == "projects/beta.md");
+    }
 }

@@ -6,12 +6,15 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
 
 - Registers the official file-like memory tools:
   - `memory_recall(query, topK)`
+  - `memory_list_files(prefix, limit)`
   - `memory_load_file(path)`
   - `memory_patch_file(path, old_text, new_text, occurrence)`
   - `memory_write_file(path, content)`
 - Streams assistant output token-by-token in the console.
 - Prints memory tool calls/results in the console (for transparency during runs).
 - Primes `user/profile.md` and `user/long_term_memory.md` once per session.
+- Uses `context:assemble` during session prime for deterministic preload of core files.
+- Primes a project catalog from `memory_list_files("projects/")` once per session.
 - Re-injects the memory snapshot only after `memory_write_file` / `memory_patch_file` updates one of those preloaded files.
 - Uses concise default response behavior (short replies unless user asks for detail).
 - Uses `MemNet.AgentMemory` directly for tool behavior.

@@ -26,6 +26,44 @@ public sealed class FileDocumentStore(StorageOptions options) : IDocumentStore
         return new DocumentRecord(envelope, ComputeETag(content));
     }
 
+    public Task<IReadOnlyList<FileListItem>> ListAsync(
+        string tenantId,
+        string userId,
+        string? prefix,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var directory = ResolveDocumentsDirectory(options.DataRoot, tenantId, userId);
+        if (!Directory.Exists(directory))
+        {
+            return Task.FromResult<IReadOnlyList<FileListItem>>(Array.Empty<FileListItem>());
+        }
+
+        var normalizedPrefix = NormalizePrefix(prefix);
+        var matches = new List<FileListItem>();
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var relativePath = Path.GetRelativePath(directory, file).Replace('\\', '/');
+            if (!string.IsNullOrWhiteSpace(normalizedPrefix)
+                && !relativePath.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var lastModifiedUtc = File.GetLastWriteTimeUtc(file);
+            matches.Add(new FileListItem(relativePath, new DateTimeOffset(lastModifiedUtc, TimeSpan.Zero)));
+        }
+
+        var results = matches
+            .OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<FileListItem>>(results);
+    }
+
     public async Task<DocumentRecord> UpsertAsync(DocumentKey key, DocumentEnvelope envelope, string? ifMatch, CancellationToken cancellationToken = default)
     {
         var filePath = ResolveDocumentPath(options.DataRoot, key);
@@ -82,6 +120,27 @@ public sealed class FileDocumentStore(StorageOptions options) : IDocumentStore
         var safePath = SanitizePath(key.Path);
 
         return Path.Combine(dataRoot, "tenants", safeTenant, "users", safeUser, "files", safePath);
+    }
+
+    private static string ResolveDocumentsDirectory(string dataRoot, string tenantId, string userId)
+    {
+        return Path.Combine(dataRoot, "tenants", SanitizeSegment(tenantId), "users", SanitizeSegment(userId), "files");
+    }
+
+    private static string? NormalizePrefix(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Replace('\\', '/').Trim().TrimStart('/');
+        if (normalized.Contains("..", StringComparison.Ordinal))
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_PATH_PREFIX", "Prefix must not contain '..'.");
+        }
+
+        return normalized;
     }
 
     private static string SanitizeSegment(string value)

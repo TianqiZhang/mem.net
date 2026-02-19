@@ -169,6 +169,7 @@ Recommended deployment order:
 
 | Method | Route | Purpose |
 |---|---|---|
+| `GET` | `/v1/tenants/{tenantId}/users/{userId}/files:list` | List files by optional prefix |
 | `GET` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Read file |
 | `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Patch file (`If-Match` required) |
 | `PUT` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Write file (`If-Match` required) |
@@ -247,9 +248,10 @@ Runnable reference sample:
 
 - `samples/MemNet.AgentFramework.Sample`
 
-It wires the official 4-tool memory contract directly into a Microsoft Agent Framework agent:
+It wires the official file-like memory tool contract directly into a Microsoft Agent Framework agent:
 
 - `memory_recall(query, topK)`
+- `memory_list_files(prefix, limit)`
 - `memory_load_file(path)`
 - `memory_patch_file(path, old_text, new_text, occurrence)`
 - `memory_write_file(path, content)`

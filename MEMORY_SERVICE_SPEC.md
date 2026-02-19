@@ -97,7 +97,22 @@ All endpoints are server-to-server and scoped by `(tenantId, userId)`.
 ### 7.1 Service Status
 `GET /`
 
-### 7.2 Get File
+### 7.2 List Files
+`GET /v1/tenants/{tenantId}/users/{userId}/files:list?prefix={optional}&limit={optional}`
+
+Response:
+```json
+{
+  "files": [
+    {
+      "path": "projects/project-alpha.md",
+      "last_modified_utc": "2026-02-19T12:34:56Z"
+    }
+  ]
+}
+```
+
+### 7.3 Get File
 `GET /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Response:
@@ -108,7 +123,7 @@ Response:
 }
 ```
 
-### 7.3 Patch File
+### 7.4 Patch File
 `PATCH /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Headers:
@@ -134,7 +149,7 @@ Request body:
 }
 ```
 
-### 7.4 Write File
+### 7.5 Write File
 `PUT /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
 
 Headers:
@@ -154,7 +169,7 @@ Request body:
 }
 ```
 
-### 7.5 Assemble Context (Explicit File Refs)
+### 7.6 Assemble Context (Explicit File Refs)
 `POST /v1/tenants/{tenantId}/users/{userId}/context:assemble`
 
 Request body:
@@ -174,7 +189,7 @@ Response includes:
 - `dropped_files[]` when budgets prevent inclusion
 - missing files are omitted (not an error)
 
-### 7.6 Write Event Digest
+### 7.7 Write Event Digest
 `POST /v1/tenants/{tenantId}/users/{userId}/events`
 
 Request body:
@@ -186,12 +201,12 @@ Request body:
 
 Returns `202 Accepted` when persisted.
 
-### 7.7 Search Events
+### 7.8 Search Events
 `POST /v1/tenants/{tenantId}/users/{userId}/events:search`
 
 Supports filtering by query/service/source/project/time range/top-k.
 
-### 7.8 Apply Retention
+### 7.9 Apply Retention
 `POST /v1/tenants/{tenantId}/users/{userId}/retention:apply`
 
 Request body:
@@ -204,10 +219,10 @@ Request body:
 }
 ```
 
-### 7.9 Forget User
+### 7.10 Forget User
 `DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
 
-### 7.10 Namespace Removal
+### 7.11 Namespace Removal
 The public `namespace` selector has been removed from the API surface.
 
 - canonical route family: `/files/{**path}`

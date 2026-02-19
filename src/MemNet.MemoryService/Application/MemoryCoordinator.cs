@@ -13,6 +13,8 @@ public sealed class MemoryCoordinator(
 {
     private const int MaxOpsPerPatch = 100;
     private const int MaxDocumentChars = 256_000;
+    private const int DefaultListLimit = 100;
+    private const int MaxListLimit = 500;
     private static readonly IDisposable NoopScope = new ScopeHandle();
 
     public async Task<DocumentRecord> GetDocumentAsync(DocumentKey key, CancellationToken cancellationToken = default)
@@ -28,6 +30,27 @@ public sealed class MemoryCoordinator(
 
         logger.LogInformation("Document read completed.");
         return result;
+    }
+
+    public async Task<ListFilesResponse> ListFilesAsync(
+        string tenantId,
+        string userId,
+        ListFilesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        using var scope = BeginScope("files_list", tenantId, userId);
+        logger.LogInformation("Listing files.");
+
+        var limit = request.Limit.GetValueOrDefault(DefaultListLimit);
+        Guard.True(
+            limit > 0 && limit <= MaxListLimit,
+            "INVALID_LIMIT",
+            $"limit must be between 1 and {MaxListLimit}.",
+            StatusCodes.Status400BadRequest);
+
+        var prefix = NormalizePrefix(request.Prefix);
+        var files = await documentStore.ListAsync(tenantId, userId, prefix, limit, cancellationToken);
+        return new ListFilesResponse(files);
     }
 
     public async Task<MutationResponse> PatchDocumentAsync(
@@ -214,6 +237,23 @@ public sealed class MemoryCoordinator(
             ["path"] = path,
             ["event_id"] = eventId
         }) ?? NoopScope;
+    }
+
+    private static string? NormalizePrefix(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Replace('\\', '/').Trim().TrimStart('/');
+        Guard.True(
+            !normalized.Contains("..", StringComparison.Ordinal),
+            "INVALID_PATH_PREFIX",
+            "Prefix must not contain '..'.",
+            StatusCodes.Status400BadRequest);
+
+        return normalized;
     }
 
     private sealed class ScopeHandle : IDisposable

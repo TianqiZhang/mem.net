@@ -153,7 +153,7 @@
 ### 17C - SDK Refactor Second
 - [x] Refactor `MemNet.Client` to path-only file primitives (`load/write/patch`)
 - [x] Remove namespace-based document references from public SDK surface
-- [x] Add high-level 4-tool facade in `MemNet.AgentMemory` matching LLM tool contract exactly
+- [x] Add high-level file-like tool facade in `MemNet.AgentMemory` matching LLM tool contract exactly
 - [x] Keep optional slot/policy helper APIs app-facing while file tools are primary
 
 ### 17D - Test Hardening and Validation
@@ -166,7 +166,8 @@
 - [ ] Add migration guide from slot/policy-oriented SDK usage to file-like memory tools
 - [x] Make mutation/event evidence payloads opaque JSON across service + SDK contracts
 - [x] Remove policy runtime module and compatibility-field references from service/docs
-- [x] Update README examples to use markdown-first files and 4-tool contract only
+- [x] Update README examples to use markdown-first files and file-like tool contract
+- [x] Add file listing API (`files:list`) plus SDK/samples support for restart-safe project discovery
 - [x] Add official Microsoft Agent Framework sample using file-like memory tools
 - [ ] Close Phase 17 only after full build + spec tests pass and docs/specs are in sync
 

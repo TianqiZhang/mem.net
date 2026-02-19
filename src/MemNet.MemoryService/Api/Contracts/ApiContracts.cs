@@ -18,6 +18,13 @@ public sealed record ReplaceDocumentRequest(
     string Reason,
     JsonNode? Evidence);
 
+public sealed record ListFilesRequest(
+    string? Prefix,
+    int? Limit);
+
+public sealed record ListFilesResponse(
+    IReadOnlyList<FileListItem> Files);
+
 public sealed record AssembleContextRequest(
     IReadOnlyList<AssembleFileRef> Files,
     int? MaxDocs,

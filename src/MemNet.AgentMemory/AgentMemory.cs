@@ -175,6 +175,22 @@ public sealed class AgentMemory
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<MemoryFileListItem>> MemoryListFilesAsync(
+        MemNet.Client.MemNetScope scope,
+        string? prefix = null,
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _client.ListFilesAsync(
+            scope,
+            new MemNet.Client.ListFilesRequest(prefix, limit),
+            cancellationToken);
+
+        return response.Files
+            .Select(x => new MemoryFileListItem(x.Path, x.LastModifiedUtc))
+            .ToArray();
+    }
+
     public async Task<MemoryFile> MemoryLoadFileAsync(
         MemNet.Client.MemNetScope scope,
         string path,

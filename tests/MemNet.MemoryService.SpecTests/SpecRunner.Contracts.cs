@@ -59,6 +59,9 @@ internal sealed partial class SpecRunner
         };
         var updated = await documentStore.UpsertAsync(key, updatedEnvelope, fetched.ETag);
         Assert.True(!string.Equals(updated.ETag, fetched.ETag, StringComparison.Ordinal), "Document contract expected ETag change on update.");
+
+        var listed = await documentStore.ListAsync("tenant-contract", "user-contract", "user/", 20);
+        Assert.True(listed.Any(x => string.Equals(x.Path, "user/contract.json", StringComparison.Ordinal)), "Document contract expected list to include created file.");
     }
 
     private static async Task RunEventStoreContractAsync(IEventStore eventStore, string tenantId, string userId)

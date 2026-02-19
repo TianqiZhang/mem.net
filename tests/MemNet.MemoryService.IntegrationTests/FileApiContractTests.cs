@@ -28,6 +28,43 @@ public sealed class FileApiContractTests(MemNetApiFixture fixture)
     }
 
     [Fact]
+    public async Task ListFiles_ByPrefix_ReturnsMatchingPaths()
+    {
+        fixture.ResetDataRoot();
+
+        var projectA = ApiTestHelpers.FileRoute(fixture, "projects/alpha.md");
+        var projectB = ApiTestHelpers.FileRoute(fixture, "projects/beta.md");
+        var profile = ApiTestHelpers.FileRoute(fixture, "user/profile.md");
+
+        Assert.Equal(HttpStatusCode.OK, (await fixture.Client.SendAsync(ApiTestHelpers.CreatePutRequest(projectA, CreateReplaceBody("project-alpha")))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await fixture.Client.SendAsync(ApiTestHelpers.CreatePutRequest(projectB, CreateReplaceBody("project-beta")))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await fixture.Client.SendAsync(ApiTestHelpers.CreatePutRequest(profile, CreateReplaceBody("profile")))).StatusCode);
+
+        var listResponse = await fixture.Client.GetAsync(ApiTestHelpers.FilesListRoute(fixture, prefix: "projects/", limit: 20));
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+
+        var payload = await ApiTestHelpers.ReadJsonObjectAsync(listResponse);
+        var files = payload["files"]?.AsArray() ?? throw new Xunit.Sdk.XunitException("Expected files array.");
+        var paths = files
+            .Select(x => x?["path"]?.GetValue<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToArray();
+
+        Assert.Equal(2, paths.Length);
+        Assert.Contains("projects/alpha.md", paths);
+        Assert.Contains("projects/beta.md", paths);
+    }
+
+    [Fact]
+    public async Task ListFiles_InvalidLimit_ReturnsBadRequest()
+    {
+        fixture.ResetDataRoot();
+
+        var response = await fixture.Client.GetAsync(ApiTestHelpers.FilesListRoute(fixture, prefix: "projects/", limit: 0));
+        await ApiTestHelpers.AssertApiErrorAsync(response, HttpStatusCode.BadRequest, "INVALID_LIMIT");
+    }
+
+    [Fact]
     public async Task PatchFile_WithStaleEtag_ReturnsPreconditionFailed()
     {
         fixture.ResetDataRoot();

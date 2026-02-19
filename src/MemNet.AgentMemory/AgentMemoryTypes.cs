@@ -64,6 +64,10 @@ public sealed record MemoryFile(
     string Content,
     string ETag);
 
+public sealed record MemoryFileListItem(
+    string Path,
+    DateTimeOffset LastModifiedUtc);
+
 public sealed record MemoryPatchEdit(
     string OldText,
     string NewText,

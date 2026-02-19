@@ -59,6 +59,22 @@ app.Use(async (context, next) =>
 
 app.MapGet("/", () => Results.Ok(new { service = "mem.net", status = "ok" }));
 
+app.MapGet("/v1/tenants/{tenantId}/users/{userId}/files:list", async (
+    [FromRoute] string tenantId,
+    [FromRoute] string userId,
+    [FromQuery] string? prefix,
+    [FromQuery] int? limit,
+    MemoryCoordinator coordinator,
+    CancellationToken cancellationToken) =>
+{
+    var result = await coordinator.ListFilesAsync(
+        tenantId,
+        userId,
+        new ListFilesRequest(prefix, limit),
+        cancellationToken);
+    return Results.Ok(result);
+});
+
 app.MapGet("/v1/tenants/{tenantId}/users/{userId}/files/{**path}", async (
     [FromRoute] string tenantId,
     [FromRoute] string userId,

@@ -15,6 +15,8 @@ public sealed record DocumentEnvelope(
 
 public sealed record DocumentRecord(DocumentEnvelope Envelope, string ETag);
 
+public sealed record FileListItem(string Path, DateTimeOffset LastModifiedUtc);
+
 public sealed record PatchOperation(string Op, string Path, JsonNode? Value);
 
 public sealed record EventDigest(

@@ -35,6 +35,41 @@ public sealed class MemNetClientIntegrationTests(MemNetApiFixture fixture)
     }
 
     [Fact]
+    public async Task ListFiles_ByPrefix_Works()
+    {
+        fixture.ResetDataRoot();
+        using var client = SdkTestData.CreateClient(fixture.Client);
+
+        var scope = new MemNetScope(fixture.TenantId, fixture.UserId);
+        await SdkTestData.SeedDefaultUserFilesAsync(client, scope);
+
+        await client.WriteFileAsync(
+            scope,
+            new FileRef("projects/alpha.md"),
+            new ReplaceDocumentRequest(
+                Document: new DocumentEnvelope(
+                    DocId: $"doc-{Guid.NewGuid():N}",
+                    SchemaId: "memnet.file",
+                    SchemaVersion: "1.0.0",
+                    CreatedAt: DateTimeOffset.UtcNow,
+                    UpdatedAt: DateTimeOffset.UtcNow,
+                    UpdatedBy: "sdk-tests",
+                    Content: new JsonObject
+                    {
+                        ["content_type"] = "text/markdown",
+                        ["text"] = "# Alpha\n"
+                    }),
+                Reason: "seed_project"),
+            ifMatch: "*");
+
+        var listed = await client.ListFilesAsync(
+            scope,
+            new ListFilesRequest(Prefix: "projects/", Limit: 20));
+
+        Assert.Contains(listed.Files, x => x.Path == "projects/alpha.md");
+    }
+
+    [Fact]
     public async Task ApiErrors_AreMappedToMemNetApiException()
     {
         fixture.ResetDataRoot();

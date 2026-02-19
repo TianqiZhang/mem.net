@@ -47,6 +47,17 @@ public sealed record FileReadResult(
     string ETag,
     DocumentEnvelope Document);
 
+public sealed record ListFilesRequest(
+    string? Prefix = null,
+    int? Limit = null);
+
+public sealed record FileListItem(
+    string Path,
+    DateTimeOffset LastModifiedUtc);
+
+public sealed record ListFilesResponse(
+    IReadOnlyList<FileListItem> Files);
+
 public sealed record AssembleContextRequest(
     IReadOnlyList<AssembleFileRef> Files,
     int? MaxDocs = null,

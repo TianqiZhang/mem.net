@@ -9,6 +9,23 @@ internal static class ApiTestHelpers
     public static string FileRoute(MemNetApiFixture fixture, string path) =>
         $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/files/{path}";
 
+    public static string FilesListRoute(MemNetApiFixture fixture, string? prefix = null, int? limit = null)
+    {
+        var route = $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/files:list";
+        var query = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(prefix))
+        {
+            query.Add($"prefix={Uri.EscapeDataString(prefix)}");
+        }
+
+        if (limit.HasValue)
+        {
+            query.Add($"limit={limit.Value}");
+        }
+
+        return query.Count == 0 ? route : $"{route}?{string.Join("&", query)}";
+    }
+
     public static string EventsRoute(MemNetApiFixture fixture) =>
         $"/v1/tenants/{fixture.TenantId}/users/{fixture.UserId}/events";
 

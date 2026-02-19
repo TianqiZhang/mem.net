@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.ClientModel;
 using System.Text;
+using System.Text.Json;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using MemNet.AgentMemory;
@@ -28,7 +29,7 @@ using var memClient = new MemNetClient(new MemNetClientOptions
 
 var scope = new MemNetScope(tenantId, userId);
 var memory = new AgentMemory(memClient, new AgentMemoryPolicy("default", Array.Empty<MemorySlotPolicy>()));
-var memorySessionContext = new MemorySessionContext(memory, scope);
+var memorySessionContext = new MemorySessionContext(memClient, memory, scope);
 await memorySessionContext.PrimeAsync();
 var memoryTools = new MemoryTools(memory, scope, memorySessionContext);
 var chatClient = useAzureOpenAi
@@ -43,10 +44,11 @@ AIAgent agent = chatClient.AsAIAgent(
             "Keep responses concise by default (target <= 120 words, unless user explicitly asks for detail). " +
             "Do not dump long blocks of text unless requested. " +
             "Use memory tools to persist important facts in markdown files and recall prior event digests. " +
-            "Prefer: user/profile.md, user/long_term_memory.md, projects/{project_id}.md.",
+            "Prefer: profile.md, long_term_memory.md, projects/{project_name}.md.",
         tools:
         [
             AIFunctionFactory.Create(memoryTools.MemoryRecallAsync, name: "memory_recall"),
+            AIFunctionFactory.Create(memoryTools.MemoryListFilesAsync, name: "memory_list_files"),
             AIFunctionFactory.Create(memoryTools.MemoryLoadFileAsync, name: "memory_load_file"),
             AIFunctionFactory.Create(memoryTools.MemoryPatchFileAsync, name: "memory_patch_file"),
             AIFunctionFactory.Create(memoryTools.MemoryWriteFileAsync, name: "memory_write_file")
@@ -55,7 +57,7 @@ AIAgent agent = chatClient.AsAIAgent(
 var health = await memClient.GetServiceStatusAsync();
 Console.WriteLine($"Connected to mem.net: {health.Service} ({health.Status})");
 Console.WriteLine($"LLM provider: {providerLabel}; model/deployment: {modelName}");
-Console.WriteLine("Memory preload policy: prime once per session; refresh/reinject after profile/long-term writes.");
+Console.WriteLine("Memory preload policy: prime once per session; refresh/reinject after profile/long-term/project updates.");
 Console.WriteLine("Type messages. Use /exit to quit.\n");
 
 var session = await agent.CreateSessionAsync();
@@ -172,6 +174,7 @@ internal sealed class MemoryTools
         [Description("Maximum number of hits. Recommended range: 1-20.")] int topK = 8,
         CancellationToken cancellationToken = default)
     {
+        topK = Math.Clamp(topK, 1, 20);
         LogToolCall("memory_recall", $"query=\"{ClampForLog(query, 80)}\", topK={topK}");
         var results = await _memory.MemoryRecallAsync(_scope, query, topK, cancellationToken);
         if (results.Count == 0)
@@ -196,9 +199,47 @@ internal sealed class MemoryTools
         return sb.ToString();
     }
 
+    [Description("List existing memory files. Optionally filter by path prefix.")]
+    public async Task<string> MemoryListFilesAsync(
+        [Description("Optional path prefix. Example: projects/.")] string? prefix = null,
+        [Description("Optional maximum files to return. Recommended range: 1-200.")] int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        limit = Math.Clamp(limit, 1, 200);
+        var normalizedPrefix = string.IsNullOrWhiteSpace(prefix) ? null : prefix;
+        LogToolCall("memory_list_files", $"prefix=\"{normalizedPrefix ?? ""}\", limit={limit}");
+
+        var files = await _memory.MemoryListFilesAsync(_scope, normalizedPrefix, limit, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(normalizedPrefix)
+            && normalizedPrefix.StartsWith("projects/", StringComparison.OrdinalIgnoreCase))
+        {
+            _sessionContext.UpdateProjectCatalog(files);
+        }
+
+        if (files.Count == 0)
+        {
+            LogToolResult("memory_list_files", "0 results");
+            return "No files matched that prefix.";
+        }
+
+        var sb = new StringBuilder();
+        foreach (var file in files)
+        {
+            sb.Append("- ")
+                .Append(file.Path)
+                .Append(" (last_modified_utc=")
+                .Append(file.LastModifiedUtc.ToString("O"))
+                .AppendLine(")");
+        }
+
+        var result = sb.ToString().TrimEnd();
+        LogToolResult("memory_list_files", result);
+        return result;
+    }
+
     [Description("Load a memory file by path and return its full text content.")]
     public async Task<string> MemoryLoadFileAsync(
-        [Description("File path, for example user/profile.md.")] string path,
+        [Description("File path, for example profile.md.")] string path,
         CancellationToken cancellationToken = default)
     {
         LogToolCall("memory_load_file", $"path=\"{path}\"");
@@ -218,7 +259,7 @@ internal sealed class MemoryTools
 
     [Description("Patch text in a memory file by replacing old_text with new_text.")]
     public async Task<string> MemoryPatchFileAsync(
-        [Description("File path, for example user/long_term_memory.md.")] string path,
+        [Description("File path, for example profile.md, long_term_memory.md, projects/{project_name}.md.")] string path,
         [Description("Exact existing text to match.")] string old_text,
         [Description("Replacement text.")] string new_text,
         [Description("1-based occurrence index when old_text appears multiple times. Optional.")] int? occurrence = null,
@@ -237,7 +278,7 @@ internal sealed class MemoryTools
 
             var result = BuildFileContentResult(path, file.Content, "Patched");
             LogToolResult("memory_patch_file", result);
-            _sessionContext.MarkPreloadedFileUpdated(path, file.Content);
+            _sessionContext.MarkFileUpdated(path, file.Content);
             return result;
         }
         catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -249,7 +290,7 @@ internal sealed class MemoryTools
 
     [Description("Write full text content to a memory file (create or replace).")]
     public async Task<string> MemoryWriteFileAsync(
-        [Description("File path, for example user/long_term_memory.md.")] string path,
+        [Description("File path, for example profile.md, long_term_memory.md, projects/{project_name}.md.")] string path,
         [Description("Full markdown content to write.")] string content,
         CancellationToken cancellationToken = default)
     {
@@ -257,7 +298,7 @@ internal sealed class MemoryTools
         var file = await _memory.MemoryWriteFileAsync(_scope, path, content, cancellationToken: cancellationToken);
         var result = BuildFileContentResult(path, file.Content, "Wrote");
         LogToolResult("memory_write_file", result);
-        _sessionContext.MarkPreloadedFileUpdated(path, file.Content);
+        _sessionContext.MarkFileUpdated(path, file.Content);
         return result;
     }
 
@@ -289,25 +330,47 @@ internal sealed class MemoryTools
 
 internal sealed class MemorySessionContext
 {
-    private const string ProfilePath = "user/profile.md";
-    private const string LongTermPath = "user/long_term_memory.md";
+    private const string ProfilePath = "profile.md";
+    private const string LongTermPath = "long_term_memory.md";
+    private const string ProjectsPrefix = "projects/";
 
+    private readonly MemNetClient _client;
     private readonly AgentMemory _memory;
     private readonly MemNetScope _scope;
     private string? _profileContent;
     private string? _longTermContent;
+    private List<string> _projectFiles = new();
     private bool _includeSnapshotOnNextTurn = true;
 
-    public MemorySessionContext(AgentMemory memory, MemNetScope scope)
+    public MemorySessionContext(MemNetClient client, AgentMemory memory, MemNetScope scope)
     {
+        _client = client;
         _memory = memory;
         _scope = scope;
     }
 
     public async Task PrimeAsync(CancellationToken cancellationToken = default)
     {
-        _profileContent = await TryLoadMemoryFileAsync(ProfilePath, cancellationToken);
-        _longTermContent = await TryLoadMemoryFileAsync(LongTermPath, cancellationToken);
+        var assembled = await _client.AssembleContextAsync(
+            _scope,
+            new AssembleContextRequest(
+                Files:
+                [
+                    new AssembleFileRef(ProfilePath),
+                    new AssembleFileRef(LongTermPath)
+                ],
+                MaxDocs: 4,
+                MaxCharsTotal: 40_000),
+            cancellationToken);
+
+        _profileContent = FindAssembledFileText(assembled, ProfilePath);
+        _longTermContent = FindAssembledFileText(assembled, LongTermPath);
+
+        var projects = await _memory.MemoryListFilesAsync(_scope, ProjectsPrefix, 200, cancellationToken);
+        _projectFiles = projects
+            .Select(x => x.Path)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         _includeSnapshotOnNextTurn = true;
     }
 
@@ -330,33 +393,56 @@ internal sealed class MemorySessionContext
         ];
     }
 
-    public void MarkPreloadedFileUpdated(string path, string content)
+    public void MarkFileUpdated(string path, string content)
     {
-        if (path.Equals(ProfilePath, StringComparison.OrdinalIgnoreCase))
+        var normalizedPath = NormalizePath(path);
+        if (normalizedPath.Equals(ProfilePath, StringComparison.OrdinalIgnoreCase))
         {
             _profileContent = content;
             _includeSnapshotOnNextTurn = true;
             return;
         }
 
-        if (path.Equals(LongTermPath, StringComparison.OrdinalIgnoreCase))
+        if (normalizedPath.Equals(LongTermPath, StringComparison.OrdinalIgnoreCase))
         {
             _longTermContent = content;
+            _includeSnapshotOnNextTurn = true;
+            return;
+        }
+
+        if (normalizedPath.StartsWith(ProjectsPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            AddProjectFile(normalizedPath);
             _includeSnapshotOnNextTurn = true;
         }
     }
 
-    private async Task<string?> TryLoadMemoryFileAsync(string path, CancellationToken cancellationToken)
+    public void UpdateProjectCatalog(IReadOnlyList<MemoryFileListItem> files)
     {
-        try
-        {
-            var file = await _memory.MemoryLoadFileAsync(_scope, path, cancellationToken);
-            return file.Content;
-        }
-        catch (MemNetApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        _projectFiles = files
+            .Select(x => NormalizePath(x.Path))
+            .Where(x => x.StartsWith(ProjectsPrefix, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _includeSnapshotOnNextTurn = true;
+    }
+
+    private static string? FindAssembledFileText(AssembleContextResponse assembled, string path)
+    {
+        var match = assembled.Files.FirstOrDefault(x => x.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
         {
             return null;
         }
+
+        var text = match.Document.Content["text"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            return text;
+        }
+
+        return JsonSerializer.Serialize(match.Document.Content, new JsonSerializerOptions { WriteIndented = true });
     }
 
     private string BuildSnapshotText()
@@ -365,6 +451,8 @@ internal sealed class MemorySessionContext
         AppendSnapshotSection(sb, ProfilePath, _profileContent);
         sb.AppendLine();
         AppendSnapshotSection(sb, LongTermPath, _longTermContent);
+        sb.AppendLine();
+        AppendProjectCatalogSection(sb, _projectFiles);
         return sb.ToString().TrimEnd();
     }
 
@@ -383,5 +471,38 @@ internal sealed class MemorySessionContext
         {
             sb.AppendLine(content.TrimEnd());
         }
+    }
+
+    private static void AppendProjectCatalogSection(StringBuilder sb, IReadOnlyList<string> projectFiles)
+    {
+        sb.AppendLine("[projects/catalog]");
+        if (projectFiles.Count == 0)
+        {
+            sb.AppendLine("(none)");
+            return;
+        }
+
+        foreach (var projectPath in projectFiles)
+        {
+            sb.Append("- ").AppendLine(projectPath);
+        }
+    }
+
+    private void AddProjectFile(string path)
+    {
+        if (_projectFiles.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _projectFiles.Add(path);
+        _projectFiles = _projectFiles
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return path.Replace('\\', '/').Trim().TrimStart('/');
     }
 }

@@ -124,6 +124,21 @@ public class MemoryCoordinatorValidationTests
         Assert.Equal("MISSING_ASSEMBLY_TARGETS", ex.Code);
     }
 
+    [Fact]
+    public async Task ListFiles_InvalidLimit_Returns400()
+    {
+        var coordinator = CreateCoordinator(new FakeDocumentStore());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.ListFilesAsync(
+                "tenant",
+                "user",
+                new ListFilesRequest(Prefix: "projects/", Limit: 0)));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("INVALID_LIMIT", ex.Code);
+    }
+
     private static MemoryCoordinator CreateCoordinator(IDocumentStore documentStore)
     {
         return new MemoryCoordinator(
@@ -178,6 +193,32 @@ public class MemoryCoordinatorValidationTests
             var stored = new DocumentRecord(envelope, etag);
             _records[id] = stored;
             return Task.FromResult(stored);
+        }
+
+        public Task<IReadOnlyList<FileListItem>> ListAsync(
+            string tenantId,
+            string userId,
+            string? prefix,
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            _ = tenantId;
+            _ = userId;
+            _ = cancellationToken;
+
+            var normalizedPrefix = string.IsNullOrWhiteSpace(prefix)
+                ? null
+                : prefix.Replace('\\', '/').Trim().TrimStart('/');
+
+            var files = _records.Keys
+                .Select(x => x[(x.IndexOf('/', x.IndexOf('/') + 1) + 1)..])
+                .Where(x => normalizedPrefix is null || x.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .Take(limit)
+                .Select(x => new FileListItem(x, DateTimeOffset.UtcNow))
+                .ToArray();
+
+            return Task.FromResult<IReadOnlyList<FileListItem>>(files);
         }
 
         public Task<bool> ExistsAsync(DocumentKey key, CancellationToken cancellationToken = default)

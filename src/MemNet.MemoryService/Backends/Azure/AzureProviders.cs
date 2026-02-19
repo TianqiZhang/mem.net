@@ -34,6 +34,52 @@ public sealed class AzureBlobDocumentStore(AzureClients clients) : IDocumentStor
         }
     }
 
+    public async Task<IReadOnlyList<FileListItem>> ListAsync(
+        string tenantId,
+        string userId,
+        string? prefix,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var documentsPrefix = AzurePathBuilder.DocumentsPrefix(tenantId, userId);
+        var normalizedPrefix = NormalizePrefix(prefix);
+        var blobPrefix = string.IsNullOrWhiteSpace(normalizedPrefix)
+            ? documentsPrefix
+            : $"{documentsPrefix}{normalizedPrefix}";
+
+        var matches = new List<FileListItem>();
+        try
+        {
+            await foreach (var blob in clients.DocumentsContainer.GetBlobsAsync(prefix: blobPrefix, cancellationToken: cancellationToken))
+            {
+                var relativePath = blob.Name.StartsWith(documentsPrefix, StringComparison.Ordinal)
+                    ? blob.Name[documentsPrefix.Length..]
+                    : blob.Name;
+
+                if (string.IsNullOrWhiteSpace(relativePath))
+                {
+                    continue;
+                }
+
+                var lastModifiedUtc = blob.Properties.LastModified?.UtcDateTime ?? DateTime.UnixEpoch;
+                matches.Add(new FileListItem(relativePath, new DateTimeOffset(lastModifiedUtc, TimeSpan.Zero)));
+            }
+        }
+        catch (RequestFailedException ex) when (ex.Status == StatusCodes.Status404NotFound)
+        {
+            return Array.Empty<FileListItem>();
+        }
+        catch (RequestFailedException ex)
+        {
+            throw AzureErrorMapper.ToApiException(ex, "AZURE_DOCUMENT_LIST_FAILED", "Failed to list documents from Azure Blob Storage.");
+        }
+
+        return matches
+            .OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToArray();
+    }
+
     public async Task<DocumentRecord> UpsertAsync(
         DocumentKey key,
         DocumentEnvelope envelope,
@@ -100,6 +146,22 @@ public sealed class AzureBlobDocumentStore(AzureClients clients) : IDocumentStor
         {
             throw AzureErrorMapper.ToApiException(ex, "AZURE_DOCUMENT_EXISTS_FAILED", "Failed to check document existence in Azure Blob Storage.");
         }
+    }
+
+    private static string? NormalizePrefix(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Replace('\\', '/').Trim().TrimStart('/');
+        if (normalized.Contains("..", StringComparison.Ordinal))
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, "INVALID_PATH_PREFIX", "Prefix must not contain '..'.");
+        }
+
+        return normalized;
     }
 }
 
@@ -900,6 +962,21 @@ public sealed class AzureBlobDocumentStore : IDocumentStore
         _ = key;
         _ = envelope;
         _ = ifMatch;
+        _ = cancellationToken;
+        throw NotEnabled();
+    }
+
+    public Task<IReadOnlyList<FileListItem>> ListAsync(
+        string tenantId,
+        string userId,
+        string? prefix,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        _ = tenantId;
+        _ = userId;
+        _ = prefix;
+        _ = limit;
         _ = cancellationToken;
         throw NotEnabled();
     }
