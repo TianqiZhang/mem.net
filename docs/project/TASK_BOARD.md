@@ -28,8 +28,8 @@
 ### Docs and Contract Clarity
 
 - [x] Rewrite `README.md` to file-first model with migration guide
-- [x] Rewrite `MEMORY_SERVICE_SPEC.md` as normative policy-free contract
-- [x] Rewrite `SDK_SPEC.md` with file-like tools as primary SDK surface
+- [x] Rewrite `docs/specs/MEMORY_SERVICE_SPEC.md` as normative policy-free contract
+- [x] Rewrite `docs/specs/SDK_SPEC.md` with file-like tools as primary SDK surface
 - [x] Split task tracking into active board + archive log
 
 ### File-First v2 Boundary

@@ -34,10 +34,10 @@ Build and maintain `mem.net` as a robust, configurable memory service that is ea
 - Keep tests deterministic and environment-independent.
 
 ## Documentation Rules
-- Update `TASK_BOARD.md` when status changes.
+- Update `docs/project/TASK_BOARD.md` when status changes.
 - Preserve historical status in `docs/archive/TASK_BOARD_ARCHIVE.md` when simplifying active board content.
 - Keep `README.md` run instructions accurate.
-- Keep implementation aligned with `MEMORY_SERVICE_SPEC.md`; document intentional deviations.
+- Keep implementation aligned with `docs/specs/MEMORY_SERVICE_SPEC.md`; document intentional deviations.
 
 ## Azure SDK Rule
 - For any specific Azure SDK/API usage (types, methods, options, auth flows), verify against the latest Microsoft docs before coding.

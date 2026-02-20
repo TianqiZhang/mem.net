@@ -7,7 +7,7 @@
 
 ## Phase 0 - Project Setup
 - [x] Initialize solution and projects
-- [x] Add repo docs (`README.md`, `AGENTS.md`, `TASK_BOARD.md`)
+- [x] Add repo docs (`README.md`, `AGENTS.md`, `docs/project/TASK_BOARD.md`)
 - [x] Configure offline-friendly NuGet behavior
 
 ## Phase 1 - Core Domain and Config
@@ -81,7 +81,7 @@
 - [x] Add retries/timeouts for Azure SDK calls with bounded policies
 - [x] Add structured logs with tenant/user/path correlation fields
 - [x] Document Azure setup in `README.md` (auth, env vars, index bootstrap)
-- [x] Final review vs `MEMORY_SERVICE_SPEC.md` and close remaining gaps
+- [x] Final review vs `docs/specs/MEMORY_SERVICE_SPEC.md` and close remaining gaps
 
 ## Phase 11 - First-Principles Simplification
 - [x] Collapse runtime config to a single policy model (`policy.json`) (later removed in Phase 16.5)
@@ -108,8 +108,8 @@
 - [x] Update README/spec docs with bootstrap flow and deployment order
 
 ## Phase 14 - v2 Boundary Lock (Service/SDK)
-- [x] Redefine `MEMORY_SERVICE_SPEC.md` to policy-free v2 target boundary
-- [x] Redefine `SDK_SPEC.md` so policy/binding/slot validation is SDK-owned
+- [x] Redefine `docs/specs/MEMORY_SERVICE_SPEC.md` to policy-free v2 target boundary
+- [x] Redefine `docs/specs/SDK_SPEC.md` so policy/binding/slot validation is SDK-owned
 - [x] Define pre-release breaking-change policy (no compatibility commitments)
 
 ## Phase 15 - Service v2 Migration
@@ -141,7 +141,7 @@
 - [x] Define official LLM memory tool contract (`memory_recall`, `memory_load_file`, `memory_patch_file`, `memory_write_file`)
 - [x] Define deterministic text patch request shape (`old_text`, `new_text`, `occurrence`) and error model
 - [x] Decide native route shape (`/documents` with file payload vs dedicated `/files` routes) and document in specs
-- [x] Update `MEMORY_SERVICE_SPEC.md` and `SDK_SPEC.md` with authoritative file-first contracts and pre-release boundary
+- [x] Update `docs/specs/MEMORY_SERVICE_SPEC.md` and `docs/specs/SDK_SPEC.md` with authoritative file-first contracts and pre-release boundary
 
 ### 17B - API Simplification First (Service)
 - [x] Replace `/documents/{namespace}/{path}` with `/files/{**path}` as canonical file API
@@ -202,7 +202,7 @@
 ### 18F - Cleanup and Exit
 - [x] Create and complete old-to-new test parity checklist
 - [x] Remove or slim custom executable spec runner to smoke-only scope
-- [x] Update `README.md`, `TASK_BOARD.md`, and specs with final test strategy
+- [x] Update `README.md`, `docs/project/TASK_BOARD.md`, and specs with final test strategy
 - [ ] Close Phase 18 only after CI passes with framework tests and coverage reporting
 
 ## Residual Gaps (Post-Review)

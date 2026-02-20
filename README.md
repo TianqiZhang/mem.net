@@ -262,9 +262,9 @@ dotnet run --project tools/MemNet.Bootstrap -- azure --apply
 
 ## Repository Guide
 
-- `MEMORY_SERVICE_SPEC.md`: service technical spec (normative contract)
-- `SDK_SPEC.md`: SDK technical spec (`MemNet.Client`, `MemNet.AgentMemory`)
-- `TASK_BOARD.md`: active execution board
+- `docs/specs/MEMORY_SERVICE_SPEC.md`: service technical spec (normative contract)
+- `docs/specs/SDK_SPEC.md`: SDK technical spec (`MemNet.Client`, `MemNet.AgentMemory`)
+- `docs/project/TASK_BOARD.md`: active execution board
 - `docs/archive/TASK_BOARD_ARCHIVE.md`: historical phase log
 - `src/MemNet.MemoryService`: service runtime
 - `src/MemNet.Client`: low-level .NET SDK
@@ -275,6 +275,6 @@ dotnet run --project tools/MemNet.Bootstrap -- azure --apply
 
 For non-trivial changes:
 
-1. Align behavior with `MEMORY_SERVICE_SPEC.md`.
+1. Align behavior with `docs/specs/MEMORY_SERVICE_SPEC.md`.
 2. Add or update tests.
-3. Update docs and `TASK_BOARD.md`.
+3. Update docs and `docs/project/TASK_BOARD.md`.
