@@ -162,20 +162,6 @@ var recalled = await memory.MemoryRecallAsync(scope, "What is Tianqi building?",
 
 The high-level SDK also exposes optional slot/policy helpers, but the primary agent contract is file-like memory tools.
 
-## Migration Guide (slot/policy -> file-like tools)
-
-If you previously modeled memory by slot IDs and template bindings, migrate to direct file primitives.
-
-| Previous style | File-first style |
-|---|---|
-| `PrepareTurnAsync` with slot defaults | `context:assemble` with explicit `files[]` |
-| Slot load by `slot_id` | `memory_load_file(path)` |
-| Slot patch with path-template indirection | `memory_patch_file(path, edits)` |
-| Slot replace | `memory_write_file(path, content)` |
-| Slot/project routing logic in runtime | Caller-owned path conventions + `memory_list_files(prefix)` |
-
-Keep slot/policy helpers only when your app explicitly needs them. They are optional, not the default integration path.
-
 ## Official Agent Sample
 
 Runnable sample:
