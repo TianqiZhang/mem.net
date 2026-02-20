@@ -8,6 +8,8 @@ File-first memory infrastructure for agents.
 
 `mem.net` provides durable scoped file storage, deterministic context assembly, event recall, and lifecycle cleanup.
 
+![mem.net architecture](mem.net.svg)
+
 ## Why mem.net
 
 - Durable memory across sessions and agent restarts.
@@ -26,15 +28,6 @@ File-first memory infrastructure for agents.
 4. Assemble explicit files into context when needed.
 
 Source of truth is file/event/audit storage. Search index is derived state.
-
-```mermaid
-flowchart LR
-    A["Agent Orchestrator"] --> B["mem.net API"]
-    B --> C["Scoped File Store"]
-    B --> D["Event Store"]
-    D --> E["Search Index (derived)"]
-    B --> F["Audit Store"]
-```
 
 ## Recommended File Convention
 
