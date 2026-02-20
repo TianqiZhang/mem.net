@@ -8,7 +8,7 @@ File-first memory infrastructure for agents.
 
 `mem.net` provides durable scoped file storage, deterministic context assembly, event recall, and lifecycle cleanup.
 
-![mem.net architecture](mem.net.svg)
+![mem.net architecture](docs/images/mem.net.svg)
 
 ## Why mem.net
 
@@ -180,7 +180,7 @@ It demonstrates:
   - `memory_write_file(path, content)`
 - memory snapshot refresh only after write/patch operations
 
-![mem.net sample agent run](mem.net.demo.png)
+![mem.net sample agent run](docs/images/mem.net.demo.png)
 
 Run with OpenAI:
 
