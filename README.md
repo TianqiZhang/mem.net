@@ -4,60 +4,49 @@
 ![.NET 8](https://img.shields.io/badge/.NET-8-512BD4)
 ![Provider](https://img.shields.io/badge/provider-filesystem%20%7C%20azure-0A7EA4)
 
-Composable memory infrastructure for multi-agent systems.
+File-first memory infrastructure for agents.
 
-`mem.net` gives agents a shared, durable memory API with optimistic concurrency, deterministic context assembly, event recall, and lifecycle cleanup.
-Application-specific memory semantics (categories, slot rules, schemas) are owned by SDK/application code.
+`mem.net` provides durable scoped file storage, deterministic context assembly, event recall, and lifecycle cleanup.
 
 ## Why mem.net
 
-- Keep memory durable and auditable across sessions and agents.
-- Keep the service generic while letting apps define memory semantics in SDK policy config.
-- Preserve conflict-safe writes with ETag optimistic concurrency.
-- Keep runtime behavior deterministic with explicit file assembly inputs.
+- Durable memory across sessions and agent restarts.
+- Conflict-safe writes with explicit ETag concurrency.
+- Deterministic assembly of context files.
+- Searchable event digests for recall.
+- Backend flexibility: local filesystem or Azure (Blob + AI Search).
 
-## Core Capabilities
+## Mental Model
 
-- File read/patch/write with ETag optimistic concurrency.
-- Context assembly from explicit file refs with budget controls.
-- Event digest write/search.
-- Opaque evidence payload support (service stores evidence JSON without app-specific schema coupling).
-- Retention and forget-user lifecycle operations.
-- Pluggable provider mode:
-  - `filesystem` (default local mode)
-  - `azure` (Blob + optional AI Search, build-flag gated)
+`mem.net` is intentionally simple:
 
-## SDK Policy Pattern
+1. Store files for a `(tenant_id, user_id)` scope.
+2. Patch or write those files with `If-Match` concurrency.
+3. Store event digests separately and search them for recall.
+4. Assemble explicit files into context when needed.
 
-`mem.net` service is generic. Recommended memory categories live in SDK policy config.
-
-- `user/profile.json`
-  - key user info
-  - optional `projects_index` for caller-side routing
-- `user/long_term_memory.json`
-  - preferences and durable user facts
-- `projects/{project_id}.json`
-  - project-specific memory
-- event digests
-  - write + search across conversations and related services
-
-Typical agent context behavior:
-- includes `profile.json` and `long_term_memory.json`
-- excludes templated project docs (load them on demand via file APIs)
-- event digests are retrieved via `POST /events:search` by the caller
-
-## Architecture
+Source of truth is file/event/audit storage. Search index is derived state.
 
 ```mermaid
 flowchart LR
-    A["Orchestrator / Agents"] --> B["mem.net API"]
-    B --> C["File Store"]
+    A["Agent Orchestrator"] --> B["mem.net API"]
+    B --> C["Scoped File Store"]
     B --> D["Event Store"]
-    B --> E["Audit Store"]
-    D --> F["Search (derived)"]
+    D --> E["Search Index (derived)"]
+    B --> F["Audit Store"]
 ```
 
-Source of truth is document/event/audit storage. Search is derived and rebuildable.
+## Recommended File Convention
+
+Service routes already scope by tenant/user, so paths can be app-relative.
+
+Recommended default for agent memory:
+
+- `profile.md`
+- `long_term_memory.md`
+- `projects/{project_name}.md`
+
+Event digests stay in `/events` and are queried through `events:search`.
 
 ## Quick Start
 
@@ -74,15 +63,7 @@ dotnet build MemNet.sln -c Debug
 dotnet run --project src/MemNet.MemoryService
 ```
 
-### 3) Run spec tests
-
-```bash
-dotnet run --project tests/MemNet.MemoryService.SpecTests -c Debug
-# optional slot/policy SDK helpers:
-# MEMNET_RUN_OPTIONAL_SDK_TESTS=1 dotnet run --project tests/MemNet.MemoryService.SpecTests -c Debug
-```
-
-### 4) Health check
+### 3) Health check
 
 ```bash
 curl -s http://localhost:5071/
@@ -97,115 +78,63 @@ Expected response:
 }
 ```
 
-## Configuration
-
-Runtime storage/provider behavior is configured via environment variables.
-
-### Key environment variables
-
-| Variable | Purpose |
-|---|---|
-| `MEMNET_PROVIDER` | `filesystem` or `azure` |
-| `MEMNET_DATA_ROOT` | Local data root for filesystem provider |
-| `MEMNET_AZURE_STORAGE_SERVICE_URI` | Blob service URI for azure provider |
-| `MEMNET_AZURE_DOCUMENTS_CONTAINER` | Documents container |
-| `MEMNET_AZURE_EVENTS_CONTAINER` | Events container |
-| `MEMNET_AZURE_AUDIT_CONTAINER` | Audit container |
-| `MEMNET_AZURE_SEARCH_ENDPOINT` | Optional Azure AI Search endpoint |
-| `MEMNET_AZURE_SEARCH_INDEX` | Optional Azure AI Search index |
-| `MEMNET_AZURE_SEARCH_SCHEMA_PATH` | Optional schema path for bootstrap tool (default: `infra/search/events-index.schema.json`) |
-
-## Azure Provider
-
-Azure provider code is compiled only when the build flag is enabled.
+### 4) Run tests
 
 ```bash
-dotnet build src/MemNet.MemoryService/MemNet.MemoryService.csproj -p:MemNetEnableAzureSdk=true
+dotnet test MemNet.sln -c Debug
 ```
 
-Run with Azure provider:
+Optional smoke runner:
 
 ```bash
-MEMNET_PROVIDER=azure \
-MEMNET_AZURE_STORAGE_SERVICE_URI="https://<account>.blob.core.windows.net" \
-MEMNET_AZURE_DOCUMENTS_CONTAINER="memnet-documents" \
-MEMNET_AZURE_EVENTS_CONTAINER="memnet-events" \
-MEMNET_AZURE_AUDIT_CONTAINER="memnet-audit" \
-MEMNET_AZURE_SEARCH_ENDPOINT="https://<service>.search.windows.net" \
-MEMNET_AZURE_SEARCH_INDEX="<events-index>" \
-dotnet run --project src/MemNet.MemoryService -p:MemNetEnableAzureSdk=true
+dotnet run --project tests/MemNet.MemoryService.SpecTests -c Debug
 ```
-
-If `MEMNET_PROVIDER=azure` is used without Azure SDK build flag, endpoints return `501 AZURE_PROVIDER_NOT_ENABLED`.
-
-## Azure Bootstrap (Init)
-
-`mem.net` runtime does not create Azure AI Search index schemas at startup.
-
-- Blob containers are created lazily on first write.
-- Search index provisioning should be done in deployment/bootstrap.
-
-Use the bootstrap tool:
-
-```bash
-dotnet run --project tools/MemNet.Bootstrap -- azure --check
-dotnet run --project tools/MemNet.Bootstrap -- azure --apply
-```
-
-`--apply` performs idempotent initialization:
-- ensures Blob containers exist
-- creates/updates the configured Azure AI Search index using `infra/search/events-index.schema.json`
-
-Required permissions:
-- Blob container management on the target storage account
-- Search index management (`Search Service Contributor` role or admin API key)
-
-Recommended deployment order:
-1. Deploy infrastructure (Search service, Storage account, identities/roles).
-2. Run bootstrap `--apply`.
-3. Deploy/start `mem.net` service.
 
 ## API Quick Reference
+
+All APIs are scoped by route:
+
+`/v1/tenants/{tenantId}/users/{userId}/...`
 
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/v1/tenants/{tenantId}/users/{userId}/files:list` | List files by optional prefix |
 | `GET` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Read file |
-| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Patch file (`If-Match` required) |
-| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Write file (`If-Match` required) |
+| `PATCH` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Deterministic patch (`If-Match` required) |
+| `PUT` | `/v1/tenants/{tenantId}/users/{userId}/files/{path}` | Replace file (`If-Match` required) |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/context:assemble` | Assemble explicit file refs |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events` | Write event digest |
 | `POST` | `/v1/tenants/{tenantId}/users/{userId}/events:search` | Search event digests |
-| `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention (explicit day values) |
+| `POST` | `/v1/tenants/{tenantId}/users/{userId}/retention:apply` | Apply retention |
 | `DELETE` | `/v1/tenants/{tenantId}/users/{userId}/memory` | Forget all user memory |
 
-## SDK Quickstart (.NET)
+## .NET SDK Quickstart
 
 ### Low-level client (`MemNet.Client`)
 
 ```csharp
 using MemNet.Client;
 
-var client = new MemNetClient(new MemNetClientOptions
+using var client = new MemNetClient(new MemNetClientOptions
 {
     BaseAddress = new Uri("http://localhost:5071"),
     ServiceId = "memory-agent"
 });
 
-var scope = new MemNetScope("tenant-1", "user-1");
-var profileRef = new FileRef("user/profile.json");
+var scope = new MemNetScope("tenant-demo", "user-demo");
 
-var current = await client.GetFileAsync(scope, profileRef);
-var updated = await client.PatchFileAsync(
+var files = await client.ListFilesAsync(scope, new ListFilesRequest(Prefix: "projects/", Limit: 100));
+
+var assembled = await client.AssembleContextAsync(
     scope,
-    profileRef,
-    new PatchDocumentRequest(
-        Ops:
+    new AssembleContextRequest(
+        Files:
         [
-            new PatchOperation("add", "/content/projects/-", "mem.net")
+            new AssembleFileRef("profile.md"),
+            new AssembleFileRef("long_term_memory.md")
         ],
-        Reason: "project_update"),
-    ifMatch: current.ETag);
+        MaxDocs: 4,
+        MaxCharsTotal: 40_000));
 ```
 
 ### High-level agent facade (`MemNet.AgentMemory`)
@@ -214,53 +143,67 @@ var updated = await client.PatchFileAsync(
 using MemNet.AgentMemory;
 using MemNet.Client;
 
-var policy = new AgentMemoryPolicy(
-    "memory-agent-default",
-    [
-        new MemorySlotPolicy("profile", "user/profile.json", null, LoadByDefault: true),
-        new MemorySlotPolicy("long_term_memory", "user/long_term_memory.json", null, LoadByDefault: true),
-        new MemorySlotPolicy("project", null, "projects/{project_id}.json", LoadByDefault: false)
-    ]);
-
 using var client = new MemNetClient(new MemNetClientOptions
 {
     BaseAddress = new Uri("http://localhost:5071"),
     ServiceId = "memory-agent"
 });
 
-var memory = new AgentMemory(client, policy);
-var scope = new MemNetScope("tenant-1", "user-1");
+var scope = new MemNetScope("tenant-demo", "user-demo");
+var memory = new AgentMemory(client, new AgentMemoryPolicy("default", []));
 
-var loaded = await memory.MemoryLoadFileAsync(scope, "user/long_term_memory.md");
-var patched = await memory.MemoryPatchFileAsync(
+await memory.MemoryWriteFileAsync(
     scope,
-    "user/long_term_memory.md",
-    [
-        new MemoryPatchEdit(
-            OldText: "## Preferences\n- concise answers\n",
-            NewText: "## Preferences\n- concise answers\n- include tradeoffs first\n")
-    ]);
+    "profile.md",
+    "# Profile\n- Name: Tianqi\n- Current Focus: building mem.net\n");
+
+var profile = await memory.MemoryLoadFileAsync(scope, "profile.md");
+
+await memory.MemoryPatchFileAsync(
+    scope,
+    "profile.md",
+    [new MemoryPatchEdit("Current Focus: building mem.net", "Current Focus: shipping mem.net")]);
+
+var recalled = await memory.MemoryRecallAsync(scope, "What is Tianqi building?", topK: 5);
 ```
 
-## Official Agent Sample (Microsoft Agent Framework)
+The high-level SDK also exposes optional slot/policy helpers, but the primary agent contract is file-like memory tools.
 
-Runnable reference sample:
+## Migration Guide (slot/policy -> file-like tools)
+
+If you previously modeled memory by slot IDs and template bindings, migrate to direct file primitives.
+
+| Previous style | File-first style |
+|---|---|
+| `PrepareTurnAsync` with slot defaults | `context:assemble` with explicit `files[]` |
+| Slot load by `slot_id` | `memory_load_file(path)` |
+| Slot patch with path-template indirection | `memory_patch_file(path, edits)` |
+| Slot replace | `memory_write_file(path, content)` |
+| Slot/project routing logic in runtime | Caller-owned path conventions + `memory_list_files(prefix)` |
+
+Keep slot/policy helpers only when your app explicitly needs them. They are optional, not the default integration path.
+
+## Official Agent Sample
+
+Runnable sample:
 
 - `samples/MemNet.AgentFramework.Sample`
 
-It wires the official file-like memory tool contract directly into a Microsoft Agent Framework agent:
+It demonstrates:
 
-- `memory_recall(query, topK)`
-- `memory_list_files(prefix, limit)`
-- `memory_load_file(path)`
-- `memory_patch_file(path, old_text, new_text, occurrence)`
-- `memory_write_file(path, content)`
-
-Sample run screenshot:
+- startup memory prime using `context:assemble`
+- restart-safe project discovery using `memory_list_files("projects/")`
+- file-like memory tools:
+  - `memory_recall(query, topK)`
+  - `memory_list_files(prefix, limit)`
+  - `memory_load_file(path)`
+  - `memory_patch_file(path, old_text, new_text, occurrence)`
+  - `memory_write_file(path, content)`
+- memory snapshot refresh only after write/patch operations
 
 ![mem.net sample agent run](mem.net.demo.png)
 
-Run it with OpenAI:
+Run with OpenAI:
 
 ```bash
 export OPENAI_API_KEY="<your_key>"
@@ -272,10 +215,10 @@ export MEMNET_USER_ID="user-demo"
 dotnet run --project samples/MemNet.AgentFramework.Sample
 ```
 
-Or with Azure OpenAI:
+Run with Azure OpenAI:
 
 ```bash
-export AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
+export AZURE_OPENAI_ENDPOINT="https://<resource>.cognitiveservices.azure.com"
 export AZURE_OPENAI_DEPLOYMENT_NAME="gpt-5.1"
 # optional if not using Azure Identity:
 # export AZURE_OPENAI_API_KEY="<your_key>"
@@ -287,42 +230,72 @@ export MEMNET_USER_ID="user-demo"
 dotnet run --project samples/MemNet.AgentFramework.Sample
 ```
 
+## Configuration
+
+### Provider selection
+
+| Variable | Purpose |
+|---|---|
+| `MEMNET_PROVIDER` | `filesystem` (default) or `azure` |
+| `MEMNET_DATA_ROOT` | Filesystem data root |
+
+### Azure provider settings
+
+| Variable | Purpose |
+|---|---|
+| `MEMNET_AZURE_STORAGE_SERVICE_URI` | Blob service URI |
+| `MEMNET_AZURE_DOCUMENTS_CONTAINER` | Documents container |
+| `MEMNET_AZURE_EVENTS_CONTAINER` | Events container |
+| `MEMNET_AZURE_AUDIT_CONTAINER` | Audit container |
+| `MEMNET_AZURE_SEARCH_ENDPOINT` | Optional AI Search endpoint |
+| `MEMNET_AZURE_SEARCH_INDEX` | Optional AI Search index |
+| `MEMNET_AZURE_SEARCH_SCHEMA_PATH` | Optional bootstrap schema path |
+
+Build with Azure SDK support:
+
+```bash
+dotnet build src/MemNet.MemoryService/MemNet.MemoryService.csproj -p:MemNetEnableAzureSdk=true
+```
+
+## Azure Bootstrap (Init)
+
+Runtime startup does not create Azure AI Search index schemas.
+
+Use bootstrap tool in deployment:
+
+```bash
+dotnet run --project tools/MemNet.Bootstrap -- azure --check
+dotnet run --project tools/MemNet.Bootstrap -- azure --apply
+```
+
+`--apply` is idempotent and will:
+
+- ensure Blob containers exist
+- create or update search index from `infra/search/events-index.schema.json`
+
 ## Testing and CI
 
-- Framework test suites: `dotnet test MemNet.sln -c Debug`.
-- CI publishes TRX test results and Cobertura coverage artifacts from framework suites.
-- CI enforces a weighted line-coverage threshold gate.
-- `tests/MemNet.MemoryService.SpecTests` is now smoke-only (startup/runtime wiring + bootstrap/Azure-shape checks).
-- Optional slot/policy spec coverage can be enabled with `MEMNET_RUN_OPTIONAL_SDK_TESTS=1`.
-- GitHub Actions workflow: `.github/workflows/ci.yml`.
-- CI currently runs:
-  - core restore/build/framework tests + coverage gate + smoke run
-  - Azure SDK-enabled restore/build/spec smoke run
+- CI workflow: `.github/workflows/ci.yml`
+- Framework suites: `dotnet test MemNet.sln -c Debug`
+- CI publishes TRX and Cobertura artifacts
+- CI enforces weighted line-coverage threshold
+- Spec runner remains smoke-only for runtime wiring and bootstrap checks
 
-## Repository Map
+## Repository Guide
 
-- `MEMORY_SERVICE_SPEC.md` - technical spec aligned with current implementation.
-- `SDK_SPEC.md` - SDK technical spec for `MemNet.Client` and `MemNet.AgentMemory`.
-- `src/MemNet.MemoryService/Api` - HTTP entrypoint and endpoint wiring.
-- `src/MemNet.MemoryService/Application` - orchestration services (`MemoryCoordinator`, lifecycle, replay).
-- `src/MemNet.MemoryService/Domain` - core models, errors, and patch engine.
-- `src/MemNet.MemoryService/Backends` - store abstractions and provider implementations.
-- `src/MemNet.Client` - low-level .NET SDK for mem.net endpoints.
-- `src/MemNet.AgentMemory` - high-level agent memory SDK facade.
-- `samples/MemNet.AgentFramework.Sample` - official Microsoft Agent Framework + mem.net sample.
-- `tools/MemNet.Bootstrap` - deployment/bootstrap tool for Azure containers and AI Search index.
-- `infra/search/events-index.schema.json` - source-controlled schema for event search index.
-- `tests/MemNet.MemoryService.SpecTests` - executable specification tests.
-- `tests/TEST_PARITY_CHECKLIST.md` - old-to-new test migration parity map.
-- `TASK_BOARD.md` - implementation progress and backlog.
-- `AGENTS.md` - development guardrails and first-principles rules.
-
-## Roadmap (Short)
-
-- Provider-agnostic contract tests.
-- Background replay/reindex orchestration.
-- Optional compaction worker with dedicated config.
+- `MEMORY_SERVICE_SPEC.md`: service technical spec (normative contract)
+- `SDK_SPEC.md`: SDK technical spec (`MemNet.Client`, `MemNet.AgentMemory`)
+- `TASK_BOARD.md`: active execution board
+- `docs/archive/TASK_BOARD_ARCHIVE.md`: historical phase log
+- `src/MemNet.MemoryService`: service runtime
+- `src/MemNet.Client`: low-level .NET SDK
+- `src/MemNet.AgentMemory`: high-level agent SDK
+- `samples/MemNet.AgentFramework.Sample`: official sample agent
 
 ## Contributing
 
-PRs are welcome. For non-trivial changes, align proposals with `MEMORY_SERVICE_SPEC.md` and keep behavior covered by spec tests.
+For non-trivial changes:
+
+1. Align behavior with `MEMORY_SERVICE_SPEC.md`.
+2. Add or update tests.
+3. Update docs and `TASK_BOARD.md`.

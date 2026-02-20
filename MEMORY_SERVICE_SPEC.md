@@ -1,60 +1,64 @@
 # mem.net Memory Service Technical Specification
 
 Project: `mem.net`  
-Status: Active v2 baseline with path-only file API  
-Version: 2.0 (target)  
-Last Updated: February 16, 2026
+Status: Active (pre-release)  
+Version: v2 file-first boundary  
+Last Updated: February 20, 2026
 
 ## 1. Purpose
-`mem.net` is a shared memory service for multi-agent systems using `(tenant_id, user_id)` scope.
 
-The v2 service focuses on infrastructure primitives:
-- durable file/document storage
-- optimistic concurrency via ETag
-- event digest write + search
-- lifecycle cleanup (retention and forget-user)
+`mem.net` is a scoped memory infrastructure service for multi-agent systems.
 
-`mem.net` does not own application-level memory semantics (policy categories, slot names, schema preferences).
+Scope key: `(tenant_id, user_id)`
 
-## 2. First-Principles Scope (v2)
-Only these runtime capabilities are in scope:
-1. Scope isolation and file/event storage.
-2. Conflict-safe writes with explicit `If-Match` semantics.
-3. Deterministic context assembly from caller-provided document refs.
-4. Lifecycle cleanup execution.
+The service provides:
 
-Anything outside these capabilities belongs in SDK/application layers.
+1. Durable file storage.
+2. Conflict-safe mutation with ETag optimistic concurrency.
+3. Deterministic context assembly from explicit file refs.
+4. Event digest write/search for recall.
+5. Lifecycle cleanup (retention and forget-user).
 
-## 3. Out of Scope (v2 Runtime)
-- Server-side policy registry and binding model.
-- Server-side schema/path guardrails for app-specific documents.
-- Server-side memory category semantics (profile, projects, long-term memory, etc.).
-- Prompt/context strategy owned by agent code.
+## 2. Runtime Boundary
 
-## 4. High-Level Architecture
-- API service (ASP.NET Core Minimal API)
-  - file read/patch/write
-  - explicit-file context assembly
-  - event write/search
-  - retention/forget-user
-- Persistence provider
+`mem.net` runtime is infrastructure-only.
+
+In scope:
+
+1. Slot-agnostic file APIs.
+2. Deterministic mutation/assembly behavior.
+3. Event indexing/search plumbing.
+4. Cleanup execution.
+
+Out of scope:
+
+1. App-specific memory categories (`profile`, `projects`, etc.).
+2. Server-side policy registries, slot bindings, or schema registries.
+3. Prompt strategy and context engineering owned by caller/SDK.
+
+## 3. Architecture
+
+- API host: ASP.NET Core Minimal API.
+- Core orchestration: `MemoryCoordinator`, `DataLifecycleService`.
+- Persistence backend (single provider mode at runtime):
   - `filesystem` (default)
   - `azure` (Blob + optional AI Search, build-flag gated)
-- Derived event index
-  - local in-memory scoring for filesystem provider
-  - Azure AI Search when configured for azure provider
 
-Source of truth is files/events/audits in storage. Search index is derived state.
+Source of truth is files/events/audits persisted in storage. Search index is derived and rebuildable.
 
-## 5. Storage Layout (Reference)
-Storage layout:
-`/tenants/{tenant_id}/users/{user_id}/files/{path}`  
-`/tenants/{tenant_id}/users/{user_id}/events/{event_id}.json`  
-`/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`  
-`/tenants/{tenant_id}/users/{user_id}/snapshots/{conversation_id}/{snapshot_id}.json` (optional external snapshot material)
+## 4. Storage Layout (reference)
 
-## 6. Core Data Contracts
-### 6.1 File Envelope
+Reference physical layout:
+
+- `/tenants/{tenant_id}/users/{user_id}/files/{path}`
+- `/tenants/{tenant_id}/users/{user_id}/events/{event_id}.json`
+- `/tenants/{tenant_id}/users/{user_id}/audit/{change_id}.json`
+- `/tenants/{tenant_id}/users/{user_id}/snapshots/...` (optional external snapshot material; lifecycle cleanup only)
+
+## 5. Core Data Contracts
+
+### 5.1 Document Envelope
+
 ```json
 {
   "doc_id": "uuid",
@@ -68,10 +72,13 @@ Storage layout:
 ```
 
 Notes:
-- `schema_id` and `schema_version` are stored transparently.
-- Service does not interpret app schema semantics beyond payload sanity/limits.
 
-### 6.2 Event Digest
+- `content` is a JSON object.
+- Service stores envelope fields transparently.
+- Service does not enforce app-specific schema semantics.
+
+### 5.2 Event Digest
+
 ```json
 {
   "event_id": "evt_01",
@@ -85,37 +92,56 @@ Notes:
   "project_ids": ["project-alpha"],
   "evidence": {
     "source": "chat",
-    "message_ids": ["m1"],
-    "snapshot_uri": "blob://..."
+    "conversation_id": "c_123",
+    "message_ids": ["m1"]
   }
 }
 ```
 
-## 7. API Specification (v2)
-All endpoints are server-to-server and scoped by `(tenantId, userId)`.
+Notes:
 
-### 7.1 Service Status
-`GET /`
+- `evidence` is opaque JSON (`JsonNode`) and is persisted without schema interpretation.
 
-### 7.2 List Files
-`GET /v1/tenants/{tenantId}/users/{userId}/files:list?prefix={optional}&limit={optional}`
+## 6. API Surface
+
+All endpoints are scoped by route:
+
+`/v1/tenants/{tenantId}/users/{userId}/...`
+
+### 6.1 Service Status
+
+- `GET /`
+
+### 6.2 List Files
+
+- `GET /files:list?prefix={optional}&limit={optional}`
+
+Behavior:
+
+- `limit` default: `100`
+- `limit` allowed range: `1..500`
+- `prefix` is optional
+- `prefix` must not contain `..`
 
 Response:
+
 ```json
 {
   "files": [
     {
-      "path": "projects/project-alpha.md",
+      "path": "projects/mem.net.md",
       "last_modified_utc": "2026-02-19T12:34:56Z"
     }
   ]
 }
 ```
 
-### 7.3 Get File
-`GET /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
+### 6.3 Get File
+
+- `GET /files/{**path}`
 
 Response:
+
 ```json
 {
   "etag": "\"...\"",
@@ -123,14 +149,24 @@ Response:
 }
 ```
 
-### 7.4 Patch File
-`PATCH /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
+### 6.4 Patch File
+
+- `PATCH /files/{**path}`
 
 Headers:
+
 - `If-Match` required
 - `X-Service-Id` optional (defaults to `unknown-service`)
 
-Request body:
+Request body supports two mutation styles:
+
+1. JSON patch operations (`ops[]`)
+2. Deterministic text edits (`edits[]`)
+
+At least one of `ops[]` or `edits[]` must be non-empty.
+
+Deterministic text edit shape:
+
 ```json
 {
   "edits": [
@@ -149,67 +185,99 @@ Request body:
 }
 ```
 
-### 7.5 Write File
-`PUT /v1/tenants/{tenantId}/users/{userId}/files/{**path}`
+Text edit rules:
+
+- target is `document.content.text` string
+- `old_text` must be non-empty
+- no match => `PATCH_MATCH_NOT_FOUND`
+- multiple matches without `occurrence` => `PATCH_MATCH_AMBIGUOUS`
+- invalid `occurrence` => `PATCH_OCCURRENCE_OUT_OF_RANGE`
+
+### 6.5 Write File
+
+- `PUT /files/{**path}`
 
 Headers:
-- `If-Match` required
+
+- `If-Match` required (`*` allowed for create-if-missing)
 - `X-Service-Id` optional
 
 Request body:
+
 ```json
 {
   "document": { "...": "..." },
   "reason": "manual_rewrite",
   "evidence": {
     "source": "tool",
-    "tool_call_id": "call_01",
-    "notes": ["manual override"]
+    "tool_call_id": "call_01"
   }
 }
 ```
 
-### 7.6 Assemble Context (Explicit File Refs)
-`POST /v1/tenants/{tenantId}/users/{userId}/context:assemble`
+### 6.6 Assemble Context
 
-Request body:
+- `POST /context:assemble`
+
+Request:
+
 ```json
 {
   "files": [
-    { "path": "user/profile.json" },
-    { "path": "user/long_term_memory.json" }
+    { "path": "profile.md" },
+    { "path": "long_term_memory.md" }
   ],
   "max_docs": 8,
   "max_chars_total": 40000
 }
 ```
 
-Response includes:
-- `files[]` with resolved envelope payload + etag
-- `dropped_files[]` when budgets prevent inclusion
-- missing files are omitted (not an error)
+Behavior:
 
-### 7.7 Write Event Digest
-`POST /v1/tenants/{tenantId}/users/{userId}/events`
+- explicit file refs only
+- request order preserved
+- defaults: `max_docs=4`, `max_chars_total=30000`
+- missing files are skipped (not an error)
+- over-budget files appear in `dropped_files[]`
+- event recall is separate (`events:search`)
 
-Request body:
+### 6.7 Write Event Digest
+
+- `POST /events`
+
+Request:
+
 ```json
 {
   "event": { "...": "..." }
 }
 ```
 
-Returns `202 Accepted` when persisted.
+Behavior:
 
-### 7.8 Search Events
-`POST /v1/tenants/{tenantId}/users/{userId}/events:search`
+- route scope must match `event.tenant_id` and `event.user_id`
+- `event_id` and `digest` are required
+- returns `202 Accepted` on persistence
 
-Supports filtering by query/service/source/project/time range/top-k.
+### 6.8 Search Events
 
-### 7.9 Apply Retention
-`POST /v1/tenants/{tenantId}/users/{userId}/retention:apply`
+- `POST /events:search`
 
-Request body:
+Supports filters:
+
+- `query`
+- `service_id`
+- `source_type`
+- `project_id`
+- `from`/`to`
+- `top_k`
+
+### 6.9 Apply Retention
+
+- `POST /retention:apply`
+
+Request:
+
 ```json
 {
   "events_days": 365,
@@ -219,67 +287,56 @@ Request body:
 }
 ```
 
-### 7.10 Forget User
-`DELETE /v1/tenants/{tenantId}/users/{userId}/memory`
+Rules:
 
-### 7.11 Namespace Removal
-The public `namespace` selector has been removed from the API surface.
+- day values must be `>= 0`
 
-- canonical route family: `/files/{**path}`
-- assembly input is path-only `files[]`
-- path conventions (such as `user/...` and `projects/...`) are app-defined
+### 6.10 Forget User
 
-## 8. Validation Rules (Runtime)
-For file mutations, service enforces:
-- `If-Match` optimistic concurrency.
-- max patch edit count (`100`).
-- deterministic text edit matching (`old_text`, `new_text`, optional `occurrence`).
-- explicit `422` errors for `PATCH_MATCH_NOT_FOUND`, `PATCH_MATCH_AMBIGUOUS`, `PATCH_OCCURRENCE_OUT_OF_RANGE`.
-- request/body structural validity and envelope payload size limits.
+- `DELETE /memory`
 
-For events, service enforces required API contract fields.
-`evidence` is treated as opaque JSON and is persisted without schema interpretation.
+Deletes all user-scoped files/events/audits/snapshots and derived search docs (when applicable).
 
-Service does not enforce app-specific path/schema policies.
+## 7. Validation and Limits
 
-## 9. Conflict Strategy
-ETag optimistic concurrency:
-1. Reject stale write (`412 ETAG_MISMATCH`).
-2. Caller refetches latest document/etag.
-3. Caller rebases and retries.
+File mutation enforcement:
 
-Service does not provide multi-document transactions.
+- `If-Match` required for `PATCH` and `PUT`
+- max patch op/edit count: `100`
+- envelope field requirements: `doc_id`, `schema_id`, `schema_version`
+- envelope max serialized size: `256_000` chars (`DOCUMENT_SIZE_EXCEEDED`)
 
-## 10. Context Assembly Behavior
-- Caller provides explicit file refs (`files[]`).
-- Service reads refs in request order.
-- `max_docs` and `max_chars_total` budgets are enforced deterministically.
-- Returned files include etag + envelope payload.
-- `events:search` remains a separate API call.
+Path validation:
 
-## 11. Retention and Deletion
-`retention:apply` removes expired:
-- event records
-- audit records
-- snapshots
-- derived search docs when enabled
+- file path must not be empty
+- file path and prefix must not contain `..`
 
-`DELETE /memory` removes all user-scoped:
-- documents
-- events
-- audits
-- snapshots
-- derived search docs when enabled
+## 8. Concurrency
 
-## 12. Error Model
+Concurrency model is optimistic ETag.
+
+Mutation flow:
+
+1. Caller reads current ETag.
+2. Caller sends mutation with `If-Match`.
+3. Service returns:
+   - success with new ETag
+   - `412 ETAG_MISMATCH` with latest ETag details on conflict
+
+No multi-document transaction semantics are provided.
+
+## 9. Error Model
+
 Canonical status codes:
-- `400` invalid request
-- `404` missing resource
-- `412` ETag mismatch
-- `422` semantic validation error
-- `500/503` service/dependency failures
 
-Error payload:
+- `400` invalid request
+- `404` not found
+- `412` ETag mismatch
+- `422` semantic validation failure
+- `500/503` unhandled/dependency errors
+
+Error envelope:
+
 ```json
 {
   "error": {
@@ -293,55 +350,59 @@ Error payload:
 }
 ```
 
-## 13. Security Boundary
-System-wide safety/compliance policy is outside memory storage and not writable through memory APIs.
+## 10. Observability and Audit
 
-`mem.net` enforces transport/storage integrity, optimistic concurrency, and auditability.
-Agent/application semantic safety is handled by SDK/application policy logic.
+Minimum telemetry expectations:
 
-## 14. Observability Requirements
-Minimum telemetry:
-- request latency by endpoint
-- mutation success/error counts (`412`, `422`, etc.)
+- endpoint latency
+- mutation success/failure counts (including `412`, `422`)
 - event search latency
-- retention/forget-user deletion counts
+- retention/forget deletion counts
 
-Audit records include actor, tenant/user, target path, ETag transition, reason, and opaque evidence payload.
+Every mutation writes an audit record with:
 
-## 15. Deployment Notes
-- Provider selected via `MemNet:Provider` or `MEMNET_PROVIDER`.
-- `filesystem` provider runs locally with no cloud dependencies.
-- `azure` provider requires Azure SDK build flag and Azure configuration.
-- If azure provider is selected without Azure SDK build flag, API returns `501 AZURE_PROVIDER_NOT_ENABLED`.
-- Azure AI Search index provisioning is deployment/bootstrap responsibility (not runtime startup mutation).
-- Bootstrap tool: `tools/MemNet.Bootstrap` with `--check` and `--apply`.
-- Event index schema artifact: `infra/search/events-index.schema.json`.
+- actor
+- tenant/user scope
+- target path
+- ETag transition
+- reason
+- operation payload metadata
+- opaque `evidence`
 
-## 16. Pre-Release Change Policy
-`mem.net` is pre-release and has no external compatibility commitments yet.
+## 11. Security Boundary
 
-- breaking API and contract changes are allowed before first public stable release
-- service runtime remains policy-free (no `policy_id`/`binding_id` selectors)
-- service runtime removes public namespace selector from file APIs
-- policy/slot/schema guardrails belong to SDK/application layers
-- `/files` path-only contract is the canonical file API
+`mem.net` does not store or expose system-level policy/prompt governance.
 
-## 17. Deferred Extensions
-- dedicated compaction worker and compaction-specific config
-- replay/reindex background orchestration
-- multi-document transaction semantics
+`mem.net` is responsible for:
 
-## 18. Acceptance Criteria (v2)
-1. Service API supports policy-free file mutation flows.
-2. ETag conflict semantics remain unchanged and explicit.
-3. Context assembly is explicit-file based and deterministic.
-4. Event write/search and lifecycle endpoints remain functional.
-5. SDK/application can own memory semantics without server coupling.
+- scoped storage isolation
+- concurrency and integrity guarantees
+- auditable mutation trails
 
-## 19. Implementation Status
-Current implementation satisfies v2 acceptance criteria with a single policy-free request shape.
-Phase 17B/17C namespace removal and file-first SDK primitives are implemented.
-Validation strategy:
-- framework-first suites (`xUnit`) are primary: `MemNet.MemoryService.UnitTests`, `MemNet.MemoryService.IntegrationTests`, `MemNet.Sdk.UnitTests`, `MemNet.Sdk.IntegrationTests`.
-- CI publishes TRX + Cobertura artifacts and enforces a weighted line-coverage threshold.
-- executable spec runner is retained as smoke-only parity (`tests/MemNet.MemoryService.SpecTests`), with optional slot/policy helper checks gated by `MEMNET_RUN_OPTIONAL_SDK_TESTS=1`.
+Application semantic safety remains caller/SDK responsibility.
+
+## 12. Deployment Notes
+
+Provider selection:
+
+- `MEMNET_PROVIDER=filesystem` (default local mode)
+- `MEMNET_PROVIDER=azure` (Blob + optional AI Search)
+
+Azure build flag:
+
+- Azure provider requires `-p:MemNetEnableAzureSdk=true`
+- Without build flag, Azure endpoints return `501 AZURE_PROVIDER_NOT_ENABLED`
+
+Initialization model:
+
+- Blob containers are created lazily on first writes
+- Azure AI Search index provisioning is deployment/bootstrap responsibility
+- bootstrap tool: `tools/MemNet.Bootstrap` (`--check`, `--apply`)
+
+## 13. Pre-Release Contract Policy
+
+`mem.net` is pre-release.
+
+- Breaking changes are allowed before first stable release.
+- Service remains policy-free and namespace-free at runtime boundary.
+- Canonical file contract is `/files/{**path}` + path-only `context:assemble` refs.

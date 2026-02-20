@@ -53,7 +53,7 @@ dotnet run --project samples/MemNet.AgentFramework.Sample
 ## Run with Azure OpenAI
 
 ```bash
-export AZURE_OPENAI_ENDPOINT="https://<resource>.openai.azure.com"
+export AZURE_OPENAI_ENDPOINT="https://<resource>.cognitiveservices.azure.com"
 export AZURE_OPENAI_DEPLOYMENT_NAME="gpt-5.1"
 # optional if not using Azure Identity:
 # export AZURE_OPENAI_API_KEY="<your_key>"

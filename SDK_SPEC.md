@@ -1,229 +1,213 @@
 # mem.net SDK Technical Specification
 
 Project: `mem.net` SDK  
-Status: Active pre-release implementation; file-first SDK primitives available  
-Last Updated: February 16, 2026
+Status: Active (pre-release)  
+Target Runtime: .NET 8  
+Last Updated: February 20, 2026
 
 ## 1. Purpose
-Define a first-party .NET SDK that:
-- makes `mem.net` easier to consume from applications
-- provides a stable memory abstraction for agent builders
-- owns application-level memory semantics outside `mem.net` runtime
 
-## 2. Boundary with mem.net Service
+Define first-party .NET SDK packages that make `mem.net` practical for agent builders while preserving a clean service boundary.
+
+## 2. Boundary with Service
+
 Service (`mem.net`) owns:
-- scope isolation
-- durable document/event storage
-- ETag concurrency
-- event search/indexing
-- lifecycle cleanup
+
+1. Scoped persistence.
+2. ETag concurrency enforcement.
+3. Context assembly endpoint.
+4. Event write/search.
+5. Lifecycle cleanup.
 
 SDK owns:
-- LLM-facing memory tool contract
-- optional policy/slot config for application semantics
-- deterministic agent-facing context composition strategy
 
-## 3. First-Principles Fit
-Every SDK abstraction must map to one of:
-- slot resolution
-- write guardrails
-- deterministic context assembly
-- lifecycle invocation
+1. Ergonomic API surface.
+2. LLM-facing memory tool abstractions.
+3. Optional application-level policy helpers.
 
-If it does not support one of these capabilities, keep it out of runtime SDK model.
+## 3. Package Model
 
-## 4. Package Layout
-Two NuGet packages:
+### 3.1 `MemNet.Client` (low-level)
 
-1. `MemNet.Client`
-- low-level HTTP API wrapper
-- endpoint-aligned contracts for v2 service API
-- typed error mapping, retries, diagnostics
+Endpoint-aligned HTTP client with typed contracts and typed exceptions.
 
-2. `MemNet.AgentMemory`
-- high-level agent-oriented API
-- file-like memory tools for LLM harnesses
-- optional slot/policy layer for app-owned memory conventions
+### 3.2 `MemNet.AgentMemory` (high-level)
 
-Optional future package:
-- `MemNet.Testing`
+Agent-oriented facade exposing file-like memory methods suitable for LLM tool harnesses.
 
-## 5. Target Frameworks
-- `net8.0` minimum for first release.
+## 4. First-Principles Rule (SDK)
 
-## 6. Low-Level API (`MemNet.Client`)
-### 6.1 Core Types
+A runtime SDK abstraction should directly support at least one of:
+
+1. deterministic context assembly
+2. write guardrails/concurrency handling
+3. lifecycle invocation
+4. practical LLM memory-tool use
+
+Anything else should stay out of core runtime SDK path.
+
+## 5. `MemNet.Client` Contract
+
+### 5.1 Core Types
+
 - `MemNetClient`
 - `MemNetClientOptions`
-- `MemNetScope` (`tenantId`, `userId`)
+- `MemNetScope` (`tenant_id`, `user_id`)
 - `FileRef` (`path`)
-- `ApiErrorEnvelope` / `ApiError`
+- API contracts under `Contracts.cs`
 
-### 6.2 Client Options
+### 5.2 Options
+
 `MemNetClientOptions`:
-- `BaseAddress` (required)
-- `ServiceId` (default `X-Service-Id` for document mutations)
-- `HttpClient` or `HttpMessageHandler` injection
-- `Retry` options (max retries, backoff)
-- `JsonSerializerOptions` override
-- `HeaderProvider` callback for auth/gateway headers
-- diagnostics callbacks (`OnRequest`, `OnResponse`)
 
-### 6.3 Methods (Endpoint-Aligned)
+- `BaseAddress` (required unless `HttpClient` already has base address)
+- `HttpClient` (optional injection)
+- `ServiceId` (default for `X-Service-Id` on mutations)
+- `Retry` (`MaxRetries`, `BaseDelay`, `MaxDelay`)
+- `JsonSerializerOptions`
+- `HeaderProvider`
+- request/response callbacks (`OnRequest`, `OnResponse`)
+
+### 5.3 Endpoint-Aligned Methods
+
 All methods accept `CancellationToken`.
 
 - `GetServiceStatusAsync()` -> `GET /`
-- `ListFilesAsync(MemNetScope scope, ListFilesRequest request)` -> `GET /files:list`
-- `GetFileAsync(MemNetScope scope, FileRef file)` -> `GET /files/{**path}`
-- `PatchFileAsync(MemNetScope scope, FileRef file, PatchDocumentRequest request, string ifMatch)` -> `PATCH /files/{**path}`
-- `WriteFileAsync(MemNetScope scope, FileRef file, ReplaceDocumentRequest request, string ifMatch)` -> `PUT /files/{**path}`
-- `AssembleContextAsync(MemNetScope scope, AssembleContextRequest request)` -> `POST /context:assemble`
-- `WriteEventAsync(MemNetScope scope, WriteEventRequest request)` -> `POST /events` (`202 Accepted`)
-- `SearchEventsAsync(MemNetScope scope, SearchEventsRequest request)` -> `POST /events:search`
-- `ApplyRetentionAsync(MemNetScope scope, ApplyRetentionRequest request)` -> `POST /retention:apply`
-- `ForgetUserAsync(MemNetScope scope)` -> `DELETE /memory`
+- `ListFilesAsync(scope, request)` -> `GET /files:list`
+- `GetFileAsync(scope, file)` -> `GET /files/{**path}`
+- `PatchFileAsync(scope, file, request, ifMatch, ...)` -> `PATCH /files/{**path}`
+- `WriteFileAsync(scope, file, request, ifMatch, ...)` -> `PUT /files/{**path}`
+- `AssembleContextAsync(scope, request)` -> `POST /context:assemble`
+- `WriteEventAsync(scope, request)` -> `POST /events`
+- `SearchEventsAsync(scope, request)` -> `POST /events:search`
+- `ApplyRetentionAsync(scope, request)` -> `POST /retention:apply`
+- `ForgetUserAsync(scope)` -> `DELETE /memory`
 
-No low-level method requires `policy_id` or `binding_id`.
+No low-level API requires `policy_id`, `binding_id`, or namespace selectors.
 
-Phase 17 status:
-- service and SDK now use path-only `/files/{**path}` semantics
-- namespace-based SDK references are removed from public surface
-- canonical file patch payload uses deterministic text `edits[]` (`old_text`, `new_text`, optional `occurrence`)
-- mutation/event `evidence` payloads are opaque JSON (`JsonNode?`) and are not schema-validated by service
+### 5.4 Retry Behavior
 
-### 6.4 Response Shapes
-- file operations: `ETag` + `DocumentEnvelope`
-- lifecycle operations: `ForgetUserResult`, `RetentionSweepResult`
+Default retries apply to retry-safe calls only.
 
-## 7. Error Model
-### 7.1 Exceptions
-- `MemNetException` (base)
-- `MemNetApiException`
-  - `StatusCode`
-  - `Code`
-  - `RequestId`
-  - `Details`
+Retryable conditions:
+
+- transport failures
+- `429`, `503`, `502`, `504`
+
+Mutations and lifecycle/event writes are not blindly retried by default.
+
+### 5.5 Error Model
+
+Exception hierarchy:
+
+- `MemNetException`
+- `MemNetApiException` (contains status/code/request_id/details/raw body)
 - `MemNetTransportException`
 
-### 7.2 Mapping
-- Non-success HTTP -> parse service envelope -> throw `MemNetApiException`.
-- Parse failures -> `MemNetException` with safe raw snippet.
+Expected service error envelope:
 
-Expected envelope:
 ```json
-{ "error": { "code": "...", "message": "...", "request_id": "...", "details": {} } }
+{
+  "error": {
+    "code": "...",
+    "message": "...",
+    "request_id": "...",
+    "details": {}
+  }
+}
 ```
 
-## 8. Concurrency Helper
-Low-level mutations require explicit `ifMatch`.
+### 5.6 Concurrency Helper
 
-High-level helper:
-- `UpdateWithRetryAsync(...)`
+`MemNetClientConcurrencyExtensions.UpdateWithRetryAsync(...)` supports conflict-aware mutation retry:
 
-Behavior:
-1. fetch current doc + etag
-2. caller callback builds mutation
+1. read latest doc/etag
+2. build update
 3. write with `If-Match`
-4. on `412 ETAG_MISMATCH`, refetch and bounded retry
+4. on `412`, refetch and retry (bounded)
 
 Default max conflict retries: `3`.
 
-## 9. High-Level API (`MemNet.AgentMemory`)
-### 9.1 Official LLM Tool Contract
-The official harness-facing contract is file-like and intentionally minimal:
+## 6. `MemNet.AgentMemory` Contract
 
-1. `memory_recall(query, top_k)`
-2. `memory_list_files(prefix, limit)`
-3. `memory_load_file(path)`
-4. `memory_patch_file(path, edits)`
-5. `memory_write_file(path, content)`
+### 6.1 Primary File-Like API (official)
 
-Recommended defaults:
-- LLM-facing files use markdown (`.md`) where possible.
-- machine/index records remain JSON where required (event contract).
+The official harness-facing contract is:
 
-### 9.2 File Tool Semantics
-`memory_load_file(path)`:
-- returns file content plus metadata (`path`, `content_type`, `etag`).
+1. `MemoryRecallAsync(scope, query, topK)`
+2. `MemoryListFilesAsync(scope, prefix, limit)`
+3. `MemoryLoadFileAsync(scope, path)`
+4. `MemoryPatchFileAsync(scope, path, edits, ...)`
+5. `MemoryWriteFileAsync(scope, path, content, ...)`
 
-`memory_write_file(path, content)`:
-- full file replacement
-- SDK/harness manages `If-Match` and retries internally.
+These map naturally to tool names such as:
 
-`memory_patch_file(path, edits)`:
-- deterministic text edits (`old_text`, `new_text`, optional `occurrence`)
-- all edits apply or none apply
-- SDK maps failures to explicit actionable errors (`not_found`, `ambiguous_match`, `etag_conflict`).
+- `memory_recall`
+- `memory_list_files`
+- `memory_load_file`
+- `memory_patch_file`
+- `memory_write_file`
 
-`memory_recall(query, top_k)`:
-- wraps event search with deterministic result shaping.
+### 6.2 File Content Convention
 
-`memory_list_files(prefix, limit)`:
-- lists files by optional prefix for restart-safe memory discovery (for example `projects/`).
+For file-like methods, SDK writes markdown-friendly envelope payloads:
 
-### 9.3 Optional Policy Layer
-Slot/policy APIs may remain as app-facing helpers, but are not the primary LLM-facing contract.
+```json
+{
+  "content_type": "text/markdown",
+  "text": "..."
+}
+```
 
-## 10. Validation Strategy (SDK-Owned)
-Primary validation target is deterministic file editing:
-- patch edit structural validation
-- deterministic `old_text` matching with optional occurrence
-- bounded edit count and payload limits
+This is a convention for ergonomic agent integration, not a service-mandated schema.
 
-Optional slot/policy validation remains available only for policy-layer APIs.
+### 6.3 Deterministic Patch Semantics
 
-## 11. Retries and Resilience
-Default retry for idempotent calls:
-- transport failures, `429`, `503`
-- exponential backoff with jitter
+`MemoryPatchFileAsync` uses deterministic text edits (`old_text`, `new_text`, optional `occurrence`).
 
-Mutations:
-- no blind retries
-- only conflict-aware retry helper for `412`
+Behavior:
 
-`POST /events` is not retried by default to avoid accidental duplicates.
+- all edits apply atomically or request fails
+- conflict retries handled via `UpdateWithRetryAsync`
+- service-side semantic failures surface as typed API errors
 
-## 12. Observability
-- surface `request_id` and status/error codes
-- expose request lifecycle hooks
-- optional OTel integration in later phase
+### 6.4 Event Recall
 
-## 13. Versioning
-- SemVer for SDK packages
-- SDK v1 targets service v2 contract
-- pre-release period allows breaking changes before first stable release
+`MemoryRecallAsync` wraps `events:search` and returns event digests for agent reasoning.
 
-## 14. Rollout Plan
-### Phase A
-- finalize specs and package skeleton
+### 6.5 Optional Policy Helper Layer
 
-### Phase B
-- implement `MemNet.Client` against v2 contract
-- add typed errors + retry baseline
+`MemNet.AgentMemory` also includes slot/policy helper APIs (`PrepareTurnAsync`, slot load/patch/replace).
 
-### Phase C
-- implement `MemNet.AgentMemory` policy loader + slot operations
-- implement `PrepareTurnAsync`
-- add conflict helper tests
+These are optional app-facing helpers and are not the primary LLM-facing integration path.
 
-### Phase D
-- docs/samples for practical agent use case
+Pure file-tool usage is supported by passing an empty policy:
 
-## 14.1 Phase 17 Outcome
-1. API-first refactor completed: namespace removed from public file APIs.
-2. SDK refactor completed: path-only file primitives in `MemNet.Client`.
-3. `MemNet.AgentMemory` exposes file-like tool methods for LLM harness workflows.
+```csharp
+var memory = new AgentMemory(client, new AgentMemoryPolicy("default", []));
+```
 
-## 15. Acceptance Criteria (SDK v1)
-1. Low-level client covers all v2 endpoints.
-2. No low-level API requires policy/binding concepts.
-3. High-level API exposes official 5-tool file-like contract for agent harnesses.
-4. Typed exceptions include service `code` and `request_id`.
-5. Concurrency helper is deterministic and bounded.
-6. Tests run offline against local harness.
+## 7. Testing Strategy
 
-## 16. Implementation Status
-Current implementation includes:
-- `src/MemNet.Client` path-based file endpoint client, typed errors, retry policy, and `UpdateWithRetryAsync`.
-- `src/MemNet.AgentMemory` high-level file-like tool methods (`MemoryRecallAsync`, `MemoryListFilesAsync`, `MemoryLoadFileAsync`, `MemoryPatchFileAsync`, `MemoryWriteFileAsync`) plus optional slot/policy helpers.
-- framework SDK coverage in `tests/MemNet.Sdk.UnitTests` and `tests/MemNet.Sdk.IntegrationTests`, with smoke parity retained in `tests/MemNet.MemoryService.SpecTests`.
+Minimum SDK validation expectations:
+
+1. Unit tests for retry/error mapping.
+2. Integration tests against in-process mem.net API host.
+3. Deterministic patch and ETag conflict coverage.
+4. File-like tool flow coverage (`load/write/patch/list/recall`).
+
+## 8. Versioning and Compatibility
+
+- SDK packages use SemVer.
+- Current phase is pre-release; breaking changes are allowed before stable v1.
+- SDK contract targets mem.net v2 file-first API boundary.
+
+## 9. Design Guidance for Agent Builders
+
+Recommended pattern:
+
+1. Prime core files once per session (`context:assemble` + selected files).
+2. Use file-like tools during dialogue.
+3. Refresh in-memory snapshot after successful write/patch.
+4. Use `memory_list_files("projects/")` for restart-safe project discovery.
+5. Use `memory_recall(query, topK)` for event-based recall instead of loading large histories into file context.

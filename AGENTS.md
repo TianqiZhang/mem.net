@@ -4,7 +4,7 @@
 Build and maintain `mem.net` as a robust, configurable memory service that is easy to evolve and safe to operate.
 
 ## Working Principles
-- Keep service logic generic; memory categories belong in policy config.
+- Keep service logic generic; memory categories belong in caller conventions (optional SDK policy helpers).
 - Favor deterministic behavior over implicit magic.
 - Keep document writes auditable and conflict-safe.
 - Enforce strict validation and clear error contracts.
@@ -13,7 +13,7 @@ Build and maintain `mem.net` as a robust, configurable memory service that is ea
 ## First-Principles Rule
 - Before introducing any new abstraction, state which core service capability it supports: slot resolution, write guardrails, deterministic context assembly, or lifecycle cleanup.
 - If a concept does not directly support one of those capabilities in production today, keep it out of the runtime model.
-- Prefer binding-local policy fields over cross-file registries or indirection unless there is a proven scaling need.
+- Prefer direct file/path contracts over cross-file registries or indirection unless there is a proven scaling need.
 
 ## Engineering Rules
 - Use .NET 8 and keep external dependencies minimal.
@@ -28,12 +28,14 @@ Build and maintain `mem.net` as a robust, configurable memory service that is ea
 - If full access is not available, clearly report which `dotnet` checks could not be executed.
 
 ## Testing Rules
-- Add or update executable spec tests for every feature and regression.
+- Add or update framework unit/integration tests for every feature and regression.
+- Keep executable spec tests as smoke/parity coverage where relevant.
 - Include at least one negative test for validation/concurrency error paths.
 - Keep tests deterministic and environment-independent.
 
 ## Documentation Rules
 - Update `TASK_BOARD.md` when status changes.
+- Preserve historical status in `docs/archive/TASK_BOARD_ARCHIVE.md` when simplifying active board content.
 - Keep `README.md` run instructions accurate.
 - Keep implementation aligned with `MEMORY_SERVICE_SPEC.md`; document intentional deviations.
 
