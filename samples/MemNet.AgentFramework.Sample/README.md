@@ -12,7 +12,7 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
   - `memory_write_file(path, content)`
 - Streams assistant output token-by-token in the console.
 - Prints memory tool calls/results in the console (for transparency during runs).
-- Primes `user/profile.md` and `user/long_term_memory.md` once per session.
+- Primes `profile.md` and `long_term_memory.md` once per session.
 - Uses `context:assemble` during session prime for deterministic preload of core files.
 - Primes a project catalog from `memory_list_files("projects/")` once per session.
 - Re-injects the memory snapshot only after `memory_write_file` / `memory_patch_file` updates one of those preloaded files.
@@ -20,6 +20,16 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
 - Uses `MemNet.AgentMemory` directly for tool behavior.
 - Writes one event digest per turn so `memory_recall` has data to search.
 - Returns file content (not ETag text) from `memory_patch_file` and `memory_write_file`.
+
+## Code layout
+
+- `Program.cs`: composition root and streaming chat loop.
+- `SampleConfig.cs`: environment-driven sample configuration.
+- `LlmClientFactory.cs`: OpenAI/Azure OpenAI client creation.
+- `AgentPrompt.cs`: agent instructions.
+- `MemoryTools.cs`: tool implementations exposed to the model.
+- `MemorySessionContext.cs`: startup preload (`context:assemble`) and snapshot refresh policy.
+- `TurnDigestWriter.cs`: per-turn event digest write logic.
 
 ## Prerequisites
 
