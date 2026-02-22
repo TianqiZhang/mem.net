@@ -18,22 +18,30 @@ var memorySessionContext = new MemorySessionContext(memClient, memory, scope);
 await memorySessionContext.PrimeAsync();
 var memoryTools = new MemoryTools(memory, scope, memorySessionContext);
 var chatClient = LlmClientFactory.Create(config);
+await using var learnMcp = await LearnMcpTools.CreateAsync(config);
+
+var tools = new List<AITool>
+{
+    AIFunctionFactory.Create(memoryTools.MemoryRecallAsync, name: "memory_recall"),
+    AIFunctionFactory.Create(memoryTools.MemoryListFilesAsync, name: "memory_list_files"),
+    AIFunctionFactory.Create(memoryTools.MemoryLoadFileAsync, name: "memory_load_file"),
+    AIFunctionFactory.Create(memoryTools.MemoryPatchFileAsync, name: "memory_patch_file"),
+    AIFunctionFactory.Create(memoryTools.MemoryWriteFileAsync, name: "memory_write_file")
+};
+tools.AddRange(learnMcp.Tools);
 
 AIAgent agent = chatClient.AsAIAgent(
         name: "memory-agent",
         instructions: AgentPrompt.Instructions,
-        tools:
-        [
-            AIFunctionFactory.Create(memoryTools.MemoryRecallAsync, name: "memory_recall"),
-            AIFunctionFactory.Create(memoryTools.MemoryListFilesAsync, name: "memory_list_files"),
-            AIFunctionFactory.Create(memoryTools.MemoryLoadFileAsync, name: "memory_load_file"),
-            AIFunctionFactory.Create(memoryTools.MemoryPatchFileAsync, name: "memory_patch_file"),
-            AIFunctionFactory.Create(memoryTools.MemoryWriteFileAsync, name: "memory_write_file")
-        ]);
+        tools: [.. tools]);
 
 var health = await memClient.GetServiceStatusAsync();
 Console.WriteLine($"Connected to mem.net: {health.Service} ({health.Status})");
 Console.WriteLine($"LLM provider: {config.ProviderLabel}; model/deployment: {config.ModelName}");
+Console.WriteLine(
+    learnMcp.IsEnabled
+        ? $"Microsoft Learn MCP: {learnMcp.Endpoint} ({learnMcp.ToolCount} tool(s) loaded)"
+        : "Microsoft Learn MCP: disabled");
 Console.WriteLine("Memory preload policy: prime once per session; refresh/reinject after profile/long-term/project updates.");
 Console.WriteLine("Type messages. Use /exit to quit.\n");
 

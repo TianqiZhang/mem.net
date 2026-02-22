@@ -3,6 +3,8 @@ internal sealed record SampleConfig(
     string TenantId,
     string UserId,
     string ServiceId,
+    bool EnableLearnMcp,
+    string LearnMcpEndpoint,
     bool UseAzureOpenAi,
     string? AzureOpenAiEndpoint,
     string ModelName,
@@ -21,9 +23,28 @@ internal sealed record SampleConfig(
             TenantId: Environment.GetEnvironmentVariable("MEMNET_TENANT_ID") ?? "tenant-demo",
             UserId: Environment.GetEnvironmentVariable("MEMNET_USER_ID") ?? "user-demo",
             ServiceId: Environment.GetEnvironmentVariable("MEMNET_SERVICE_ID") ?? "memory-agent-sample",
+            EnableLearnMcp: GetBooleanEnv("MEMNET_ENABLE_LEARN_MCP", defaultValue: true),
+            LearnMcpEndpoint: Environment.GetEnvironmentVariable("MEMNET_LEARN_MCP_ENDPOINT") ?? "https://learn.microsoft.com/api/mcp",
             UseAzureOpenAi: useAzureOpenAi,
             AzureOpenAiEndpoint: azureOpenAiEndpoint,
             ModelName: modelName,
             ProviderLabel: useAzureOpenAi ? "azure_openai" : "openai");
+    }
+
+    private static bool GetBooleanEnv(string name, bool defaultValue)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return defaultValue;
+        }
+
+        if (bool.TryParse(raw, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new InvalidOperationException(
+            $"Environment variable '{name}' must be 'true' or 'false' when set.");
     }
 }

@@ -10,6 +10,7 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
   - `memory_load_file(path)`
   - `memory_patch_file(path, old_text, new_text, occurrence)`
   - `memory_write_file(path, content)`
+- Connects to Microsoft Learn MCP (`https://learn.microsoft.com/api/mcp`) and exposes its tools to the same agent for grounded Microsoft docs answers.
 - Streams assistant output token-by-token in the console.
 - Prints memory tool calls/results in the console (for transparency during runs).
 - Primes `profile.md` and `long_term_memory.md` once per session.
@@ -26,6 +27,7 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
 - `Program.cs`: composition root and streaming chat loop.
 - `SampleConfig.cs`: environment-driven sample configuration.
 - `LlmClientFactory.cs`: OpenAI/Azure OpenAI client creation.
+- `LearnMcpTools.cs`: Microsoft Learn MCP connection and tool loading.
 - `AgentPrompt.cs`: agent instructions.
 - `MemoryTools.cs`: tool implementations exposed to the model.
 - `MemorySessionContext.cs`: startup preload (`context:assemble`) and snapshot refresh policy.
@@ -34,9 +36,18 @@ Minimal Microsoft Agent Framework console sample using `mem.net` as long-term me
 ## Prerequisites
 
 - `mem.net` service running (default: `http://localhost:5071`)
+- Internet access to `https://learn.microsoft.com/api/mcp` (enabled by default; configurable)
 - One model provider:
   - OpenAI (`OPENAI_API_KEY`; optional `OPENAI_MODEL`, default `gpt-5.1`)
   - Azure OpenAI (`AZURE_OPENAI_ENDPOINT`; optional `AZURE_OPENAI_DEPLOYMENT_NAME`, default `gpt-5.1`; auth via `AZURE_OPENAI_API_KEY` or Azure Identity)
+
+## Optional MCP configuration
+
+```bash
+# defaults shown
+export MEMNET_ENABLE_LEARN_MCP="true"
+export MEMNET_LEARN_MCP_ENDPOINT="https://learn.microsoft.com/api/mcp"
+```
 
 ## Run with OpenAI
 
