@@ -10,9 +10,17 @@
 
 ### Runtime and Providers
 
+- [ ] Publish Retrievo as NuGet package and replace relative project reference
 - [ ] Execute env-gated live Azure integration runs (real tenant resources)
 - [ ] Run end-to-end manual API checks with `MEMNET_PROVIDER=azure`
 
+### Local Search Backend
+
+- [x] Integrate Retrievo as local index/retrieval engine (`RetrievoEventStore`)
+- [x] Add range filtering and contains filtering to Retrievo (Phase 1 enhancements)
+- [x] Register `retrievo` provider in `MemoryBackendFactory`
+- [x] Add RetrievoEventStore unit tests (18 tests covering search, filtering, cross-tenant isolation)
+- [x] Code review and fix all CRITICAL/WARNING findings (composite key, case normalization, dispose race, UTC timestamps, cancellation token)
 ### Search and Lifecycle
 
 - [ ] Implement background replay/reindex worker orchestration

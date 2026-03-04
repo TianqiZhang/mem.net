@@ -20,4 +20,8 @@
     <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\retrievo\src\Retrievo\Retrievo.csproj" />
+  </ItemGroup>
+
 </Project>

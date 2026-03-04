@@ -40,6 +40,20 @@ public sealed class AzureMemoryBackend : IMemoryBackend
     }
 }
 
+public sealed class RetrievoMemoryBackend : IMemoryBackend
+{
+    public string Name => "retrievo";
+
+    public void RegisterServices(IServiceCollection services, IConfiguration configuration)
+    {
+        _ = configuration;
+        services.AddSingleton<IDocumentStore, FileDocumentStore>();
+        services.AddSingleton<IEventStore, RetrievoEventStore>();
+        services.AddSingleton<IAuditStore, FileAuditStore>();
+        services.AddSingleton<IUserDataMaintenanceStore, FileUserDataMaintenanceStore>();
+    }
+}
+
 public static class MemoryBackendFactory
 {
     public static IMemoryBackend Create(string provider)
@@ -47,6 +61,7 @@ public static class MemoryBackendFactory
         return provider switch
         {
             "filesystem" => new FilesystemMemoryBackend(),
+            "retrievo" => new RetrievoMemoryBackend(),
             "azure" => new AzureMemoryBackend(),
             _ => throw new InvalidOperationException($"Unsupported provider '{provider}'.")
         };

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/TianqiZhang/mem.net/actions/workflows/ci.yml/badge.svg)](https://github.com/TianqiZhang/mem.net/actions/workflows/ci.yml)
 ![.NET 8](https://img.shields.io/badge/.NET-8-512BD4)
-![Provider](https://img.shields.io/badge/provider-filesystem%20%7C%20azure-0A7EA4)
+![Provider](https://img.shields.io/badge/provider-filesystem%20%7C%20retrievo%20%7C%20azure-0A7EA4)
 
 File-first memory infrastructure for agents.
 
@@ -16,7 +16,7 @@ File-first memory infrastructure for agents.
 - Conflict-safe writes with explicit ETag concurrency.
 - Deterministic assembly of context files.
 - Searchable event digests for recall.
-- Backend flexibility: local filesystem or Azure (Blob + AI Search).
+- Backend flexibility: local filesystem, Retrievo (BM25 search), or Azure (Blob + AI Search).
 
 ## Mental Model
 
@@ -215,9 +215,27 @@ dotnet run --project samples/MemNet.AgentFramework.Sample
 
 | Variable | Purpose |
 |---|---|
-| `MEMNET_PROVIDER` | `filesystem` (default) or `azure` |
+| `MEMNET_PROVIDER` | `filesystem` (default), `retrievo`, or `azure` |
 | `MEMNET_DATA_ROOT` | Filesystem data root |
 
+### Retrievo provider settings
+
+The `retrievo` provider uses [Retrievo](https://github.com/TianqiZhang/retrievo) as a local BM25 search engine for event digests while keeping filesystem storage for documents, audit, and user data.
+
+| Variable | Purpose |
+|---|---|
+| `MEMNET_PROVIDER` | Set to `retrievo` |
+| `MEMNET_DATA_ROOT` | Filesystem data root (same as filesystem provider) |
+
+**Repository layout requirement:** The Retrievo source is referenced as a sibling project. Clone both repos under the same parent directory:
+
+```
+parent/
+  mem.net/      # this repo
+  retrievo/     # https://github.com/TianqiZhang/retrievo
+```
+
+The project reference resolves via `../../../retrievo/src/Retrievo/Retrievo.csproj`. Once Retrievo is published as a NuGet package, this sibling requirement will be removed.
 ### Azure provider settings
 
 | Variable | Purpose |
