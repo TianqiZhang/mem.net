@@ -83,6 +83,64 @@ public class MemoryCoordinatorValidationTests
     }
 
     [Fact]
+    public async Task PatchDocument_TextEdits_OccurrenceOutOfRange_Returns422()
+    {
+        var store = new FakeDocumentStore();
+        var key = TestKey;
+        var seeded = await store.UpsertAsync(
+            key,
+            CreateEnvelope(new JsonObject
+            {
+                ["text"] = "alpha\nalpha\n"
+            }),
+            "*");
+        var coordinator = CreateCoordinator(store);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.PatchDocumentAsync(
+                key,
+                new PatchDocumentRequest(
+                    Ops: [],
+                    Reason: "text_patch",
+                    Evidence: null,
+                    Edits: [new TextPatchEdit("alpha\n", "beta\n", 3)]),
+                ifMatch: seeded.ETag,
+                actor: "tests"));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("PATCH_OCCURRENCE_OUT_OF_RANGE", ex.Code);
+    }
+
+    [Fact]
+    public async Task PatchDocument_TextEdits_WithoutContentText_Returns422()
+    {
+        var store = new FakeDocumentStore();
+        var key = TestKey;
+        var seeded = await store.UpsertAsync(
+            key,
+            CreateEnvelope(new JsonObject
+            {
+                ["title"] = "missing text"
+            }),
+            "*");
+        var coordinator = CreateCoordinator(store);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.PatchDocumentAsync(
+                key,
+                new PatchDocumentRequest(
+                    Ops: [],
+                    Reason: "text_patch",
+                    Evidence: null,
+                    Edits: [new TextPatchEdit("alpha", "beta", 1)]),
+                ifMatch: seeded.ETag,
+                actor: "tests"));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("PATCH_TEXT_NOT_FOUND", ex.Code);
+    }
+
+    [Fact]
     public async Task PatchDocument_TextEdits_ApplyDeterministicallyWithOccurrence()
     {
         var store = new FakeDocumentStore();
@@ -107,6 +165,31 @@ public class MemoryCoordinatorValidationTests
             actor: "tests");
 
         Assert.Equal("line A\nline X\nline B\n", patched.Document.Content["text"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task PatchDocument_WithMoreThanMaxOperations_Returns422()
+    {
+        var store = new FakeDocumentStore();
+        var key = TestKey;
+        var seeded = await store.UpsertAsync(key, CreateEnvelope(new JsonObject { ["value"] = "seed" }), "*");
+        var coordinator = CreateCoordinator(store);
+        var ops = Enumerable.Range(0, 101)
+            .Select(_ => new PatchOperation("replace", "/content/value", JsonValue.Create("updated")))
+            .ToArray();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.PatchDocumentAsync(
+                key,
+                new PatchDocumentRequest(
+                    Ops: ops,
+                    Reason: "test",
+                    Evidence: null),
+                ifMatch: seeded.ETag,
+                actor: "tests"));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("PATCH_TOO_LARGE", ex.Code);
     }
 
     [Fact]
@@ -140,6 +223,46 @@ public class MemoryCoordinatorValidationTests
     }
 
     [Fact]
+    public async Task ListFiles_PathTraversalPrefix_Returns400()
+    {
+        var coordinator = CreateCoordinator(new FakeDocumentStore());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.ListFilesAsync(
+                "tenant",
+                "user",
+                new ListFilesRequest(Prefix: "../secrets", Limit: 10)));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("INVALID_PATH_PREFIX", ex.Code);
+    }
+
+    [Fact]
+    public async Task ReplaceDocument_ExceedingMaxDocumentSize_Returns422()
+    {
+        var store = new FakeDocumentStore();
+        var key = TestKey;
+        var coordinator = CreateCoordinator(store);
+        var oversizedText = new string('x', 260_000);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.ReplaceDocumentAsync(
+                key,
+                new ReplaceDocumentRequest(
+                    Document: CreateEnvelope(new JsonObject
+                    {
+                        ["text"] = oversizedText
+                    }),
+                    Reason: "test",
+                    Evidence: null),
+                ifMatch: "*",
+                actor: "tests"));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("DOCUMENT_SIZE_EXCEEDED", ex.Code);
+    }
+
+    [Fact]
     public async Task WriteEvent_KeywordsCountExceedsMax_Returns422()
     {
         var coordinator = CreateCoordinator(new FakeDocumentStore());
@@ -161,6 +284,29 @@ public class MemoryCoordinatorValidationTests
 
         Assert.Equal(422, ex.StatusCode);
         Assert.Equal("EVENT_METADATA_TOO_LARGE", ex.Code);
+    }
+
+    [Fact]
+    public async Task WriteEvent_MissingEventId_Returns400()
+    {
+        var coordinator = CreateCoordinator(new FakeDocumentStore());
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.WriteEventAsync(
+                new EventDigest(
+                    EventId: "",
+                    TenantId: "tenant",
+                    UserId: "user",
+                    ServiceId: "test-service",
+                    Timestamp: DateTimeOffset.UtcNow,
+                    SourceType: "test",
+                    Digest: "test digest",
+                    Keywords: [],
+                    ProjectIds: [],
+                    Evidence: null)));
+
+        Assert.Equal(400, ex.StatusCode);
+        Assert.Equal("INVALID_EVENT", ex.Code);
     }
 
     [Fact]
