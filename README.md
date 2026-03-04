@@ -227,7 +227,7 @@ The `retrievo` provider uses [Retrievo](https://github.com/TianqiZhang/retrievo)
 | `MEMNET_PROVIDER` | Set to `retrievo` |
 | `MEMNET_DATA_ROOT` | Filesystem data root (same as filesystem provider) |
 
-**Retrievo as NuGet dependency:** Retrievo is automatically installed via NuGet (version 0.2.0-preview.1) when you run `dotnet restore`. No sibling directory setup is required—the package integrates seamlessly with the filesystem storage and audit systems.
+**Retrievo as NuGet dependency:** Retrievo is automatically installed via NuGet (version 0.3.0-preview.2) when you run `dotnet restore`. No sibling directory setup is required—the package integrates seamlessly with the filesystem storage and audit systems.
 ### Azure provider settings
 
 | Variable | Purpose |
