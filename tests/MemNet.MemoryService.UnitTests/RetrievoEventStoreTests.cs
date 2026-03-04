@@ -5,17 +5,23 @@ using MemNet.MemoryService.Infrastructure;
 
 namespace MemNet.MemoryService.UnitTests;
 
-public class RetrievoEventStoreTests : IDisposable
+public class RetrievoEventStoreTests : IAsyncLifetime, IDisposable
 {
     private readonly string _dataRoot;
-    private readonly RetrievoEventStore _store;
+    private RetrievoEventStore _store = null!;
 
     public RetrievoEventStoreTests()
     {
         _dataRoot = Path.Combine(Path.GetTempPath(), $"memnet-retrievo-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dataRoot);
-        _store = new RetrievoEventStore(new StorageOptions { DataRoot = _dataRoot });
     }
+
+    public async Task InitializeAsync()
+    {
+        _store = await RetrievoEventStore.CreateAsync(new StorageOptions { DataRoot = _dataRoot });
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     public void Dispose()
     {
@@ -203,7 +209,7 @@ public class RetrievoEventStoreTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(eventsDir, "evt-preexist.json"), json);
 
         // Create a new store instance — it should index existing files
-        using var newStore = new RetrievoEventStore(new StorageOptions { DataRoot = _dataRoot });
+        using var newStore = await RetrievoEventStore.CreateAsync(new StorageOptions { DataRoot = _dataRoot });
 
         var results = await newStore.QueryAsync("tenant1", "user1",
             new EventSearchRequest(Query: "meeting", ServiceId: null, SourceType: null, ProjectId: null, From: null, To: null, TopK: 10));
@@ -211,7 +217,6 @@ public class RetrievoEventStoreTests : IDisposable
         Assert.Single(results);
         Assert.Equal("evt-preexist", results[0].EventId);
     }
-
     [Fact]
     public async Task QueryAsync_NoMatchingResults_ReturnsEmpty()
     {

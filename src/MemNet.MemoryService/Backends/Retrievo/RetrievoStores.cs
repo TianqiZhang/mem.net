@@ -12,18 +12,36 @@ namespace MemNet.MemoryService.Infrastructure;
 /// in an in-memory Retrievo <see cref="IMutableHybridSearchIndex"/> for BM25 lexical retrieval.
 /// The search index is derived state; the filesystem is the source of truth.
 /// </summary>
-public sealed class RetrievoEventStore : IEventStore, IDisposable
+/// <remarks>
+/// Use <see cref="CreateAsync"/> to construct; the constructor is private to avoid sync I/O in DI resolution.
+/// </remarks>
+public sealed class RetrievoEventStore : IEventStore, IDisposable, IAsyncDisposable
 {
     private readonly StorageOptions _options;
-    private readonly object _writeLock = new();
+    private readonly ReaderWriterLockSlim _rwLock = new();
     private readonly Dictionary<string, EventDigest> _digestCache = new(StringComparer.Ordinal);
     private IMutableHybridSearchIndex _index;
     private bool _disposed;
 
-    public RetrievoEventStore(StorageOptions options)
+    private RetrievoEventStore(StorageOptions options, IMutableHybridSearchIndex index)
     {
         _options = options;
-        _index = RebuildIndex();
+        _index = index;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="RetrievoEventStore"/>, asynchronously scanning existing event files to build the search index.
+    /// </summary>
+    public static async Task<RetrievoEventStore> CreateAsync(StorageOptions options, CancellationToken cancellationToken = default)
+    {
+        var (index, cache) = await RebuildIndexAsync(options.DataRoot, cancellationToken);
+        var store = new RetrievoEventStore(options, index);
+        foreach (var kvp in cache)
+        {
+            store._digestCache[kvp.Key] = kvp.Value;
+        }
+
+        return store;
     }
 
     /// <inheritdoc />
@@ -38,11 +56,16 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
         await File.WriteAllTextAsync(filePath, json, cancellationToken);
 
         var compositeKey = CompositeKey(digest.TenantId, digest.UserId, digest.EventId);
-        lock (_writeLock)
+        _rwLock.EnterWriteLock();
+        try
         {
             _digestCache[compositeKey] = digest;
             _index.Upsert(ToDocument(digest));
             _index.Commit();
+        }
+        finally
+        {
+            _rwLock.ExitWriteLock();
         }
     }
 
@@ -66,7 +89,8 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
 
         var query = BuildHybridQuery(tenantId, userId, request);
         List<EventDigest> digests;
-        lock (_writeLock)
+        _rwLock.EnterReadLock();
+        try
         {
             var response = _index.Search(query);
             digests = new List<EventDigest>(response.Results.Count);
@@ -78,13 +102,23 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
                 }
             }
         }
+        finally
+        {
+            _rwLock.ExitReadLock();
+        }
 
         return Task.FromResult<IReadOnlyList<EventDigest>>(digests);
     }
 
     public void Dispose()
     {
-        lock (_writeLock)
+        if (_disposed)
+        {
+            return;
+        }
+
+        _rwLock.EnterWriteLock();
+        try
         {
             if (_disposed)
             {
@@ -97,16 +131,31 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
                 disposable.Dispose();
             }
         }
+        finally
+        {
+            _rwLock.ExitWriteLock();
+        }
+
+        _rwLock.Dispose();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>
-    /// Scans all tenant/user event directories and builds the initial Retrievo index.
+    /// Asynchronously scans all tenant/user event directories and builds the initial Retrievo index.
     /// </summary>
-    private IMutableHybridSearchIndex RebuildIndex()
+    private static async Task<(IMutableHybridSearchIndex Index, Dictionary<string, EventDigest> Cache)> RebuildIndexAsync(
+        string dataRoot,
+        CancellationToken cancellationToken)
     {
+        var cache = new Dictionary<string, EventDigest>(StringComparer.Ordinal);
         var builder = new MutableHybridSearchIndexBuilder()
             .DefineField("project_ids", FieldType.StringArray, delimiter: '|');
-        var tenantsRoot = Path.Combine(_options.DataRoot, "tenants");
+        var tenantsRoot = Path.Combine(dataRoot, "tenants");
 
         if (Directory.Exists(tenantsRoot))
         {
@@ -128,16 +177,17 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
 
                     foreach (var file in Directory.EnumerateFiles(eventsDir, "*.json", SearchOption.TopDirectoryOnly))
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         try
                         {
-                            var json = File.ReadAllText(file);
+                            var json = await File.ReadAllTextAsync(file, cancellationToken);
                             var digest = JsonSerializer.Deserialize<EventDigest>(json, JsonDefaults.Options);
                             if (digest is null)
                             {
                                 continue;
                             }
 
-                            _digestCache[CompositeKey(digest.TenantId, digest.UserId, digest.EventId)] = digest;
+                            cache[CompositeKey(digest.TenantId, digest.UserId, digest.EventId)] = digest;
                             builder.AddDocument(ToDocument(digest));
                         }
                         catch (JsonException)
@@ -149,7 +199,7 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
             }
         }
 
-        return builder.Build();
+        return (builder.Build(), cache);
     }
 
     /// <summary>
@@ -310,6 +360,17 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
 
     private static string CompositeKey(string tenantId, string userId, string eventId)
     {
-        return $"{tenantId}/{userId}/{eventId}";
+        ValidateKeyComponent(tenantId, nameof(tenantId));
+        ValidateKeyComponent(userId, nameof(userId));
+        ValidateKeyComponent(eventId, nameof(eventId));
+        return $"{tenantId}\0{userId}\0{eventId}";
+    }
+
+    private static void ValidateKeyComponent(string value, string paramName)
+    {
+        if (value.Contains('\0'))
+        {
+            throw new ArgumentException($"Value must not contain null character.", paramName);
+        }
     }
 }

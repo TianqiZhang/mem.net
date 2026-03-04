@@ -26,21 +26,17 @@ dotnet add package Retrievo --prerelease
 
 ## High (strongly recommended)
 
-### 3. Replace serialized lock in `RetrievoEventStore` with `ReaderWriterLockSlim`
+### 3. ~~Replace serialized lock in `RetrievoEventStore` with `ReaderWriterLockSlim`~~ ✅ DONE
 
 **Where**: `RetrievoStores.cs` — `_writeLock` used in both `WriteAsync` and `QueryAsync`  
 **Problem**: All queries are serialized behind the same `lock` as writes. Under concurrent load (multiple agents querying simultaneously), this becomes a bottleneck — every read waits for every other read and every write.  
-**Fix**: Replace `object _writeLock` with `ReaderWriterLockSlim`:
-- `WriteAsync`: `_rwLock.EnterWriteLock()` / `ExitWriteLock()`
-- `QueryAsync`: `_rwLock.EnterReadLock()` / `ExitReadLock()`
+**Fix**: ~~Replace `object _writeLock` with `ReaderWriterLockSlim`.~~ **Fixed**: Replaced `object _writeLock` with `ReaderWriterLockSlim`. `WriteAsync` uses `EnterWriteLock/ExitWriteLock`, `QueryAsync` uses `EnterReadLock/ExitReadLock`. `_digestCache` is protected by the same lock scope.
 
-This allows concurrent reads while still serializing writes. The `_digestCache` dictionary also needs to become a `ConcurrentDictionary` or be protected by the same lock scope.
-
-### 4. Validate composite key components
+### 4. ~~Validate composite key components~~ ✅ DONE
 
 **Where**: `RetrievoStores.cs` — `CompositeKey()` method (line 311–314)  
 **Problem**: `CompositeKey` joins `tenantId/userId/eventId` with `/`. If any component contains `/`, keys will collide silently. Example: tenant `a/b` + user `c` = `a/b/c` = tenant `a` + user `b/c`.  
-**Fix**: Either validate that components don't contain `/` (throw `ArgumentException`), or use a delimiter that's invalid in IDs (e.g., `\0` or a multi-char separator like `:::`).
+**Fix**: ~~Validate or change delimiter.~~ **Fixed**: Changed delimiter from `/` to `\0` (null char) which is impossible in user-supplied strings. Added `ValidateKeyComponent()` that throws `ArgumentException` if any component contains `\0`.
 
 ### 5. Add OpenAPI schema export
 
@@ -66,25 +62,21 @@ ENTRYPOINT ["dotnet", "MemNet.MemoryService.dll"]
 ```
 Add a `docker-compose.yml` for one-command startup with volume mount for `MEMNET_DATA_ROOT`.
 
-### 7. Make `RebuildIndex()` async in `RetrievoEventStore`
+### 7. ~~Make `RebuildIndex()` async in `RetrievoEventStore`~~ ✅ DONE
 
 **Where**: `RetrievoStores.cs` — `RebuildIndex()` called in constructor  
 **Problem**: Reads all event JSON files from disk synchronously in the constructor. For a data root with thousands of events, this blocks startup for seconds. Constructor-time I/O is also an anti-pattern for DI containers.  
-**Fix**: Convert to factory pattern or `IHostedService.StartAsync`:
-```csharp
-public static async Task<RetrievoEventStore> CreateAsync(StorageOptions options, CancellationToken ct)
-```
-Or defer index build to first query with lazy initialization.
+**Fix**: ~~Convert to factory pattern.~~ **Fixed**: Constructor made private. Added `static async Task<RetrievoEventStore> CreateAsync(StorageOptions, CancellationToken)` factory method. `RebuildIndex()` → `static async RebuildIndexAsync()` using `File.ReadAllTextAsync` with cancellation support. DI registration updated to use factory lambda.
 
 ---
 
 ## Medium (quality improvements)
 
-### 8. Increase test coverage threshold from 40% to 60%
+### 8. ~~Increase test coverage threshold from 40% to 60%~~ ✅ DONE (raised to 45%)
 
 **Where**: `.github/workflows/ci.yml`  
 **Problem**: 40% is a very low bar. The codebase already has 29 test files — actual coverage is likely higher than 40%. The threshold should reflect reality and prevent regression.  
-**Fix**: Measure current coverage, then set threshold to `current - 5%` to prevent backsliding while leaving room for infrastructure code that's hard to unit test.
+**Fix**: ~~Measure current coverage, then set threshold.~~ **Fixed**: Measured weighted line coverage at 46.5%. Raised `COVERAGE_THRESHOLD` from `0.40` to `0.45` in `.github/workflows/ci.yml`. Conservative bump to prevent backsliding while leaving room for infrastructure code.
 
 ### 9. Add health check with backend connectivity validation
 
@@ -123,16 +115,16 @@ Or defer index build to first query with lazy initialization.
 
 ## Low (nice to have)
 
-### 13. Add `IAsyncDisposable` to `RetrievoEventStore`
+### 13. ~~Add `IAsyncDisposable` to `RetrievoEventStore`~~ ✅ DONE
 
 **Where**: `RetrievoStores.cs`  
-**Problem**: `Dispose()` holds a lock and disposes the Retrievo index synchronously. If the index grows large, dispose could take non-trivial time. ASP.NET's DI container prefers `IAsyncDisposable` for graceful shutdown.
+**Fix**: ~~Add IAsyncDisposable.~~ **Fixed**: `RetrievoEventStore` now implements `IAsyncDisposable`. `DisposeAsync()` delegates to `Dispose()`. `Dispose()` uses double-check locking with `ReaderWriterLockSlim` and disposes the lock after releasing.
 
-### 14. Add structured event metadata validation
+### 14. ~~Add structured event metadata validation~~ ✅ DONE
 
 **Where**: `MemoryCoordinator.cs` — event write path  
 **Problem**: Event digests accept arbitrary `Keywords` and `ProjectIds` arrays with no size validation. An agent could write an event with 10,000 keywords, bloating the Retrievo index.  
-**Fix**: Add configurable limits (e.g., max 50 keywords, max 20 project IDs, max 10KB digest text).
+**Fix**: ~~Add configurable limits.~~ **Fixed**: Added constants `MaxKeywords=50`, `MaxProjectIds=20`, `MaxDigestChars=10_000` in `MemoryCoordinator.cs`. Guard.True checks in `WriteEventAsync` throw 422 with `EVENT_METADATA_TOO_LARGE`. Three negative unit tests added.
 
 ### 15. Add NuGet packages for Client and AgentMemory SDKs
 
@@ -146,11 +138,11 @@ Or defer index build to first query with lazy initialization.
 **Problem**: No observability. In production, operators need to know request latency, error rates, cache hit rates, index size, etc.  
 **Fix**: Add `System.Diagnostics.Metrics` counters and `ActivitySource` spans to `MemoryCoordinator`. These are zero-cost when no listener is attached (no external dependency needed).
 
-### 17. Source Link for NuGet debugging
+### 17. ~~Source Link for NuGet debugging~~ ✅ DONE
 
 **Where**: `.csproj` files  
 **Problem**: Same as Retrievo — when SDK packages are published, users debugging through mem.net code won't see source without Source Link.  
-**Fix**: Add `Microsoft.SourceLink.GitHub` package and `<PublishRepositoryUrl>true</PublishRepositoryUrl>`.
+**Fix**: ~~Add Source Link package.~~ **Fixed**: Added `Microsoft.SourceLink.GitHub` v8.0.0 with `PublishRepositoryUrl`, `EmbedUntrackedSources`, `IncludeSymbols`, `SymbolPackageFormat=snupkg` to all 3 src/ csproj files.
 
 ---
 

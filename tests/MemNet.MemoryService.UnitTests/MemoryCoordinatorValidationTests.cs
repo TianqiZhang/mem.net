@@ -139,6 +139,78 @@ public class MemoryCoordinatorValidationTests
         Assert.Equal("INVALID_LIMIT", ex.Code);
     }
 
+    [Fact]
+    public async Task WriteEvent_KeywordsCountExceedsMax_Returns422()
+    {
+        var coordinator = CreateCoordinator(new FakeDocumentStore());
+        var keywords = Enumerable.Range(0, 51).Select(i => $"keyword_{i}").ToList();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.WriteEventAsync(
+                new EventDigest(
+                    EventId: "evt_123",
+                    TenantId: "tenant",
+                    UserId: "user",
+                    ServiceId: "test-service",
+                    Timestamp: DateTimeOffset.UtcNow,
+                    SourceType: "test",
+                    Digest: "test digest",
+                    Keywords: keywords,
+                    ProjectIds: [],
+                    Evidence: null)));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("EVENT_METADATA_TOO_LARGE", ex.Code);
+    }
+
+    [Fact]
+    public async Task WriteEvent_ProjectIdsCountExceedsMax_Returns422()
+    {
+        var coordinator = CreateCoordinator(new FakeDocumentStore());
+        var projectIds = Enumerable.Range(0, 21).Select(i => $"proj_{i}").ToList();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.WriteEventAsync(
+                new EventDigest(
+                    EventId: "evt_123",
+                    TenantId: "tenant",
+                    UserId: "user",
+                    ServiceId: "test-service",
+                    Timestamp: DateTimeOffset.UtcNow,
+                    SourceType: "test",
+                    Digest: "test digest",
+                    Keywords: [],
+                    ProjectIds: projectIds,
+                    Evidence: null)));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("EVENT_METADATA_TOO_LARGE", ex.Code);
+    }
+
+    [Fact]
+    public async Task WriteEvent_DigestLengthExceedsMax_Returns422()
+    {
+        var coordinator = CreateCoordinator(new FakeDocumentStore());
+        var longDigest = new string('x', 10_001);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => coordinator.WriteEventAsync(
+                new EventDigest(
+                    EventId: "evt_123",
+                    TenantId: "tenant",
+                    UserId: "user",
+                    ServiceId: "test-service",
+                    Timestamp: DateTimeOffset.UtcNow,
+                    SourceType: "test",
+                    Digest: longDigest,
+                    Keywords: [],
+                    ProjectIds: [],
+                    Evidence: null)));
+
+        Assert.Equal(422, ex.StatusCode);
+        Assert.Equal("EVENT_METADATA_TOO_LARGE", ex.Code);
+    }
+
     private static MemoryCoordinator CreateCoordinator(IDocumentStore documentStore)
     {
         return new MemoryCoordinator(

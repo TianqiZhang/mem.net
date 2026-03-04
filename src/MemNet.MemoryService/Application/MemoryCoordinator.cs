@@ -15,6 +15,9 @@ public sealed class MemoryCoordinator(
     private const int MaxDocumentChars = 256_000;
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private const int MaxKeywords = 50;
+    private const int MaxProjectIds = 20;
+    private const int MaxDigestChars = 10_000;
     private static readonly IDisposable NoopScope = new ScopeHandle();
 
     public async Task<DocumentRecord> GetDocumentAsync(DocumentKey key, CancellationToken cancellationToken = default)
@@ -198,6 +201,21 @@ public sealed class MemoryCoordinator(
 
         Guard.True(!string.IsNullOrWhiteSpace(digest.EventId), "INVALID_EVENT", "event_id is required.", StatusCodes.Status400BadRequest);
         Guard.True(!string.IsNullOrWhiteSpace(digest.Digest), "INVALID_EVENT", "digest is required.", StatusCodes.Status400BadRequest);
+        Guard.True(
+            digest.Keywords.Count <= MaxKeywords,
+            "EVENT_METADATA_TOO_LARGE",
+            $"Keywords count ({digest.Keywords.Count}) exceeds maximum of {MaxKeywords}.",
+            StatusCodes.Status422UnprocessableEntity);
+        Guard.True(
+            digest.ProjectIds.Count <= MaxProjectIds,
+            "EVENT_METADATA_TOO_LARGE",
+            $"ProjectIds count ({digest.ProjectIds.Count}) exceeds maximum of {MaxProjectIds}.",
+            StatusCodes.Status422UnprocessableEntity);
+        Guard.True(
+            digest.Digest.Length <= MaxDigestChars,
+            "EVENT_METADATA_TOO_LARGE",
+            $"Digest length ({digest.Digest.Length}) exceeds maximum of {MaxDigestChars}.",
+            StatusCodes.Status422UnprocessableEntity);
         return eventStore.WriteAsync(digest, cancellationToken);
     }
 

@@ -48,7 +48,8 @@ public sealed class RetrievoMemoryBackend : IMemoryBackend
     {
         _ = configuration;
         services.AddSingleton<IDocumentStore, FileDocumentStore>();
-        services.AddSingleton<IEventStore, RetrievoEventStore>();
+        services.AddSingleton<IEventStore>(sp =>
+            RetrievoEventStore.CreateAsync(sp.GetRequiredService<StorageOptions>()).GetAwaiter().GetResult());
         services.AddSingleton<IAuditStore, FileAuditStore>();
         services.AddSingleton<IUserDataMaintenanceStore, FileUserDataMaintenanceStore>();
     }

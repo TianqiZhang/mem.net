@@ -9,7 +9,7 @@ jobs:
     name: Build, Framework Tests, Coverage, Smoke
     runs-on: ubuntu-latest
     env:
-      COVERAGE_THRESHOLD: "0.40"
+      COVERAGE_THRESHOLD: "0.45"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
