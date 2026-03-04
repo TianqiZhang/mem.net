@@ -10,7 +10,7 @@
 
 ### Runtime and Providers
 
-- [ ] Publish Retrievo as NuGet package and replace relative project reference
+- [x] Publish Retrievo as NuGet package and replace relative project reference (Retrievo 0.2.0-preview.1)
 - [ ] Execute env-gated live Azure integration runs (real tenant resources)
 - [ ] Run end-to-end manual API checks with `MEMNET_PROVIDER=azure`
 
@@ -32,6 +32,7 @@
 - [-] Close Phase 18 after CI passes with framework tests and coverage reporting
 
 ## Recently Completed
+
 
 ### Docs and Contract Clarity
 

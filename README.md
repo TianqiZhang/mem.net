@@ -227,15 +227,7 @@ The `retrievo` provider uses [Retrievo](https://github.com/TianqiZhang/retrievo)
 | `MEMNET_PROVIDER` | Set to `retrievo` |
 | `MEMNET_DATA_ROOT` | Filesystem data root (same as filesystem provider) |
 
-**Repository layout requirement:** The Retrievo source is referenced as a sibling project. Clone both repos under the same parent directory:
-
-```
-parent/
-  mem.net/      # this repo
-  retrievo/     # https://github.com/TianqiZhang/retrievo
-```
-
-The project reference resolves via `../../../retrievo/src/Retrievo/Retrievo.csproj`. Once Retrievo is published as a NuGet package, this sibling requirement will be removed.
+**Retrievo as NuGet dependency:** Retrievo is automatically installed via NuGet (version 0.2.0-preview.1) when you run `dotnet restore`. No sibling directory setup is required—the package integrates seamlessly with the filesystem storage and audit systems.
 ### Azure provider settings
 
 | Variable | Purpose |
