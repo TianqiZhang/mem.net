@@ -28,6 +28,8 @@
 
 ### Quality and Release Readiness
 
+- [x] Add NuGet package metadata/readmes for `MemNet.Client` and `MemNet.AgentMemory`
+- [x] Add manual publish workflow for SDK packages to nuget.org
 - [-] Close Phase 17 after full validation run (`dotnet test` + smoke + docs sync)
 - [-] Close Phase 18 after CI passes with framework tests and coverage reporting
 

@@ -8,7 +8,21 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>0.1.0-preview.1</Version>
+    <PackageId>MemNet.AgentMemory</PackageId>
+    <Title>MemNet.AgentMemory</Title>
+    <Description>High-level file-first memory facade for mem.net agents on .NET.</Description>
+    <Authors>mem.net contributors</Authors>
+    <PackageTags>mem.net;memory;agent;sdk;llm;tools</PackageTags>
+    <PackageProjectUrl>https://github.com/TianqiZhang/mem.net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TianqiZhang/mem.net</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />

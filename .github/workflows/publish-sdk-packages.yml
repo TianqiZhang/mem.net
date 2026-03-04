@@ -1,0 +1,44 @@
+name: Publish SDK Packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Pack and push MemNet SDK packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore SDK projects
+        run: |
+          dotnet restore src/MemNet.Client/MemNet.Client.csproj --configfile NuGet.Config
+          dotnet restore src/MemNet.AgentMemory/MemNet.AgentMemory.csproj --configfile NuGet.Config
+
+      - name: Run SDK unit tests
+        run: dotnet test tests/MemNet.Sdk.UnitTests/MemNet.Sdk.UnitTests.csproj -c Release --configfile NuGet.Config
+
+      - name: Run SDK integration tests
+        run: dotnet test tests/MemNet.Sdk.IntegrationTests/MemNet.Sdk.IntegrationTests.csproj -c Release --configfile NuGet.Config
+
+      - name: Pack SDK projects
+        run: |
+          dotnet pack src/MemNet.Client/MemNet.Client.csproj -c Release --no-restore -o artifacts/nuget
+          dotnet pack src/MemNet.AgentMemory/MemNet.AgentMemory.csproj -c Release --no-restore -o artifacts/nuget
+
+      - name: Push packages to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push artifacts/nuget/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
