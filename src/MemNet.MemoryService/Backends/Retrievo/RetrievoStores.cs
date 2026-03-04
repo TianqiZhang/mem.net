@@ -104,7 +104,8 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
     /// </summary>
     private IMutableHybridSearchIndex RebuildIndex()
     {
-        var builder = new MutableHybridSearchIndexBuilder();
+        var builder = new MutableHybridSearchIndexBuilder()
+            .DefineField("project_ids", FieldType.StringArray, delimiter: '|');
         var tenantsRoot = Path.Combine(_options.DataRoot, "tenants");
 
         if (Directory.Exists(tenantsRoot))
@@ -246,13 +247,9 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
             metadataFilters["source_type"] = request.SourceType.ToLowerInvariant();
         }
 
-        Dictionary<string, string>? containsFilters = null;
         if (!string.IsNullOrWhiteSpace(request.ProjectId))
         {
-            containsFilters = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["project_ids"] = request.ProjectId.ToLowerInvariant()
-            };
+            metadataFilters["project_ids"] = request.ProjectId.ToLowerInvariant();
         }
 
         List<MetadataRangeFilter>? rangeFilters = null;
@@ -276,8 +273,6 @@ public sealed class RetrievoEventStore : IEventStore, IDisposable
             Text = request.Query,
             TopK = topK,
             MetadataFilters = metadataFilters,
-            MetadataContainsFilters = containsFilters,
-            MetadataContainsDelimiter = '|',
             MetadataRangeFilters = rangeFilters
         };
     }
