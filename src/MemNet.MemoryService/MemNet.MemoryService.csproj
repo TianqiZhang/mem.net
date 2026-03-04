@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\retrievo\src\Retrievo\Retrievo.csproj" />
+    <PackageReference Include="Retrievo" Version="0.2.0-preview.1" />
   </ItemGroup>
 
 </Project>
