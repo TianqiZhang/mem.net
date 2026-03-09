@@ -28,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Retrievo" Version="0.3.0-preview.2" />
+    <PackageReference Include="Retrievo" Version="0.3.0-preview.4" />
   </ItemGroup>
 
   <ItemGroup>
