@@ -103,6 +103,18 @@ All APIs are scoped by route:
 
 ## .NET SDK Quickstart
 
+### .NET SDK Packages
+
+- `MemNet.Client`: https://www.nuget.org/packages/MemNet.Client
+- `MemNet.AgentMemory`: https://www.nuget.org/packages/MemNet.AgentMemory
+
+Install:
+
+```bash
+dotnet add package MemNet.Client --prerelease
+dotnet add package MemNet.AgentMemory --prerelease
+```
+
 ### Low-level client (`MemNet.Client`)
 
 ```csharp

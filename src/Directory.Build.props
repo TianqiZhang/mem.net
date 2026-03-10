@@ -1,0 +1,36 @@
+<Project>
+
+  <!-- Shared version: bump here before publishing SDK packages -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>preview.1</VersionSuffix>
+  </PropertyGroup>
+
+  <!-- Source Link and deterministic builds -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <!-- Shared NuGet package metadata (only applies to packable projects) -->
+  <PropertyGroup Condition="'$(IsPackable)' != 'false'">
+    <Authors>mem.net contributors</Authors>
+    <PackageProjectUrl>https://github.com/TianqiZhang/mem.net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TianqiZhang/mem.net</RepositoryUrl>
+    <PackageTags>mem.net;memory;agent;sdk</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false' and Exists('README.md')">
+    <None Update="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
